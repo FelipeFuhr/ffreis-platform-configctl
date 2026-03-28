@@ -9,7 +9,7 @@ and secrets backed by DynamoDB. Secrets are encrypted with AES-256-GCM.
 
 | Requirement | Detail |
 |---|---|
-| Go | 1.21+ |
+| Go | 1.25+ |
 | AWS credentials | Any standard AWS credential chain |
 | DynamoDB table | Must exist before use |
 | `CONFIGCTL_TABLE` | Required env var — table name |

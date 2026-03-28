@@ -82,7 +82,7 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
   snyk:
-    if: ${{ secrets.SNYK_TOKEN != '' }}
+    if: vars.SNYK_ENABLED == 'true'
     permissions:
       contents: read
       security-events: write
@@ -92,4 +92,3 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
     secrets:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-

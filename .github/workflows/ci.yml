@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.21"
+  GO_VERSION: "1.25.8"
   GOLANGCI_LINT_VERSION: "v1.57.2"
   IMAGE: ${{ github.event.repository.name }}
 
@@ -47,19 +47,33 @@ jobs:
     name: Format (gofmt)
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
     with:
-      go-version: ${{ env.GO_VERSION }}
+      go-version: "1.25.8"
       working-directory: "."
 
   # ── 3. Vet + Lint ──────────────────────────────────────────────────────────
   lint:
     name: Lint (vet + golangci-lint)
     needs: [fmt]
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-lint.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
-    with:
-      go-version: ${{ env.GO_VERSION }}
-      golangci-lint-version: ${{ env.GOLANGCI_LINT_VERSION }}
-      working-directory: "."
-      lint-args: "--timeout=5m"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
+        with:
+          version: v1.64.8
+          install-mode: goinstall
+          args: --path-prefix=. --timeout=5m
 
   # ── 4. Test + Coverage + Vulnerability scan ────────────────────────────────
   test:
@@ -67,7 +81,7 @@ jobs:
     needs: [fmt]
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
     with:
-      go-version: ${{ env.GO_VERSION }}
+      go-version: "1.25.8"
       working-directory: "."
       test-timeout: "120s"
       run-govulncheck: true
