@@ -1,0 +1,86 @@
+name: Code Quality (SonarCloud)
+
+on:
+  pull_request:
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/code-quality.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    # Set repository variable SONAR_ENABLED=false to skip this job entirely.
+    # Default: runs. If SONAR_TOKEN or SONAR_ORGANIZATION are missing, fails
+    # explicitly with instructions — never silently passes.
+    if: vars.SONAR_ENABLED != 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for accurate blame and new-code detection
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
+
+      # ── Explicit credential check ────────────────────────────────────────
+      # Fails with a clear message if required config is absent.
+      # To disable this job entirely: Settings → Variables → add SONAR_ENABLED=false
+      - name: Verify SonarCloud configuration
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          missing=""
+          if [ -z "${SONAR_TOKEN}" ]; then
+            missing="${missing}  • SONAR_TOKEN (secret): your SonarCloud token — sonarcloud.io → My Account → Security\n"
+          fi
+          if [ -z "${{ vars.SONAR_ORGANIZATION }}" ]; then
+            missing="${missing}  • SONAR_ORGANIZATION (variable): your SonarCloud organization slug\n"
+          fi
+          if [ -n "${missing}" ]; then
+            echo "::error title=SonarCloud not configured::Missing configuration:"
+            printf "%b" "${missing}"
+            echo ""
+            echo "Add secrets: Settings → Secrets and variables → Actions → New repository secret"
+            echo "Add variables: Settings → Secrets and variables → Actions → Variables tab"
+            echo "To skip this job entirely: Settings → Variables → add SONAR_ENABLED=false"
+            exit 1
+          fi
+
+      # ── Coverage ────────────────────────────────────────────────────────────
+      - name: Generate coverage for SonarCloud
+        run: |
+          go test ./... \
+            -coverprofile=coverage.out \
+            -covermode=atomic \
+            -count=1 \
+            -timeout=120s
+
+      # ── Scan ────────────────────────────────────────────────────────────────
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || github.event.repository.name }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.go.coverage.reportPaths=coverage.out
+            -Dsonar.sources=.
+            -Dsonar.exclusions=vendor/**,**/*_test.go
+            -Dsonar.tests=.
+            -Dsonar.test.inclusions=**/*_test.go

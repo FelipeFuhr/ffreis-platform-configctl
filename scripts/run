@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Container engine abstraction: prefers podman, falls back to docker.
+# Usage: ./scripts/run <docker/podman args...>
+#   e.g. ./scripts/run build -t myimage .
+#        ./scripts/run run --rm myimage
+set -euo pipefail
+
+if command -v podman &>/dev/null; then
+  exec podman "$@"
+elif command -v docker &>/dev/null; then
+  exec docker "$@"
+else
+  echo "error: neither podman nor docker found in PATH" >&2
+  echo "Install one of: https://podman.io  https://docs.docker.com/get-docker/" >&2
+  exit 1
+fi
