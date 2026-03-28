@@ -35,3 +35,39 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Build output
+platform-configctl
+dist/
+
+# Go build cache
+vendor/
+*.test
+
+# Secrets and config — never commit these
+.env
+.env.*
+*.tfvars
+*.tfvars.json
+secrets.*
+*secret*
+*credentials*
+
+# Backup exports (may contain secrets)
+*.backup.json
+exports/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage.out
+coverage.html

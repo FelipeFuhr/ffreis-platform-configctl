@@ -1,0 +1,182 @@
+BINARY           := platform-configctl
+MODULE           := github.com/ffreis/platform-configctl
+BUILD_DIR        := bin
+GOFLAGS          := -trimpath
+LDFLAGS          := -w -s
+
+# Container engine: prefers podman, falls back to docker.
+CONTAINER_ENGINE := $(shell ./scripts/run which 2>/dev/null || command -v podman 2>/dev/null || command -v docker 2>/dev/null)
+IMAGE_NAME       := ghcr.io/ffreis/platform-configctl
+IMAGE_TAG        ?= dev
+
+GITLEAKS         ?= gitleaks
+LEFTHOOK_VERSION ?= 1.7.10
+
+MUTATION_PACKAGES ?= ./internal/crypto/... ./internal/diff/... ./internal/validate/...
+MUTATION_THRESHOLD ?= 60
+LEFTHOOK_DIR     ?= $(CURDIR)/.bin
+LEFTHOOK_BIN     ?= $(LEFTHOOK_DIR)/lefthook
+
+.PHONY: all build install test test-short vet lint tidy clean check fmt fmt-check sec ci \
+        validate plan mutation-test fuzz fuzz-extended help \
+        container-build container-test container-run container-push \
+        secrets-scan-staged lefthook-bootstrap lefthook-install lefthook-run lefthook
+
+all: build
+
+## ── Local Go targets ────────────────────────────────────────────────────────
+
+## build: compile the binary into bin/
+build:
+	@mkdir -p $(BUILD_DIR)
+	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) .
+
+## install: install the binary to GOPATH/bin
+install:
+	go install $(GOFLAGS) -ldflags "$(LDFLAGS)" .
+
+## test: run all tests with race detector
+test:
+	go test ./... -v -race -count=1
+
+## test-short: run unit tests (no live AWS)
+test-short:
+	go test ./... -short -v -count=1
+
+## vet: run go vet
+vet:
+	go vet ./...
+
+## lint: run golangci-lint
+lint:
+	golangci-lint run ./...
+
+## tidy: tidy and verify go modules
+tidy:
+	go mod tidy
+	go mod verify
+
+## clean: remove build artefacts
+clean:
+	rm -rf $(BUILD_DIR)
+
+## check: tidy + vet + test-short (fast pre-commit gate)
+check: tidy vet test-short
+
+## fmt-check: fail if any files need gofmt (mirrors CI)
+fmt-check:
+	@unformatted=$$(gofmt -l .); \
+	if [ -n "$$unformatted" ]; then \
+	  printf "The following files need gofmt:\n%s\n\nFix with: gofmt -w .\n" "$$unformatted"; \
+	  exit 1; \
+	fi
+
+## sec: run govulncheck for known CVEs in dependencies
+sec:
+	govulncheck ./...
+
+## ci: local equivalent of CI gate (fmt-check + vet + lint + test + sec)
+ci: fmt-check vet lint test sec
+
+## fmt: format all Go files in place
+fmt:
+	gofmt -w .
+
+## validate: static analysis and compilation check
+validate:
+	go vet ./...
+	go build -o /dev/null ./...
+
+## plan: not applicable — use 'make validate' or 'make ci' for Go repos
+plan:
+	@echo "INFO: 'plan' is Terraform-specific and does not apply to Go repos."
+	@echo "      To verify compilation: make validate"
+	@echo "      For a full CI-equivalent gate: make ci"
+
+## secrets-scan-staged: scan staged diff for secrets
+secrets-scan-staged:
+	@command -v $(GITLEAKS) >/dev/null 2>&1 || (echo "Missing tool: $(GITLEAKS). Install: https://github.com/gitleaks/gitleaks#installing" && exit 1)
+	$(GITLEAKS) protect --staged --redact
+
+## lefthook-bootstrap: download lefthook binary into ./.bin
+lefthook-bootstrap:
+	LEFTHOOK_VERSION="$(LEFTHOOK_VERSION)" BIN_DIR="$(LEFTHOOK_DIR)" bash ./scripts/bootstrap_lefthook.sh
+
+## lefthook-install: install git hooks (runs bootstrap first)
+lefthook-install: lefthook-bootstrap
+	@if [ -x "$(LEFTHOOK_BIN)" ] && [ -x ".git/hooks/pre-commit" ] && [ -x ".git/hooks/pre-push" ] && [ -x ".git/hooks/commit-msg" ]; then \
+		echo "lefthook hooks already installed"; \
+		exit 0; \
+	fi
+	LEFTHOOK="$(LEFTHOOK_BIN)" "$(LEFTHOOK_BIN)" install
+
+## lefthook-run: run all hooks locally (pre-commit + commit-msg + pre-push)
+lefthook-run: lefthook-bootstrap
+	LEFTHOOK="$(LEFTHOOK_BIN)" "$(LEFTHOOK_BIN)" run pre-commit
+	@tmp_msg="$$(mktemp)"; \
+	echo "chore(hooks): validate commit-msg hook" > "$$tmp_msg"; \
+	LEFTHOOK="$(LEFTHOOK_BIN)" "$(LEFTHOOK_BIN)" run commit-msg -- "$$tmp_msg"; \
+	rm -f "$$tmp_msg"
+	LEFTHOOK="$(LEFTHOOK_BIN)" "$(LEFTHOOK_BIN)" run pre-push
+
+## lefthook: install hooks and run them
+lefthook: lefthook-bootstrap lefthook-install lefthook-run
+
+## ── Container targets (podman or docker via scripts/run) ────────────────────
+
+## container-build: build the final production image
+container-build:
+	./scripts/run build \
+	  --target final \
+	  --tag $(IMAGE_NAME):$(IMAGE_TAG) \
+	  --file Containerfile \
+	  .
+
+## container-test: build the test stage and run all tests inside the container
+container-test:
+	./scripts/run build \
+	  --target test \
+	  --tag $(IMAGE_NAME):test \
+	  --file Containerfile \
+	  .
+
+## container-run: run the production image (pass args via ARGS=)
+container-run:
+	./scripts/run run --rm $(IMAGE_NAME):$(IMAGE_TAG) $(ARGS)
+
+## container-push: push image to registry (requires login)
+container-push: container-build
+	./scripts/run push $(IMAGE_NAME):$(IMAGE_TAG)
+
+## container-shell: open a shell in the builder stage for debugging
+container-shell:
+	./scripts/run run --rm -it \
+	  --entrypoint /bin/sh \
+	  $(IMAGE_NAME):test
+
+## mutation-test: run mutation testing with gremlins (slow — intended for CI/weekly)
+mutation-test: ## Run mutation testing with gremlins (slow — CI only)
+	@which gremlins >/dev/null 2>&1 || go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
+	gremlins unleash --threshold-efficacy $(MUTATION_THRESHOLD) $(MUTATION_PACKAGES)
+
+FUZZ_PACKAGES  ?= ./internal/crypto/... ./internal/validate/...
+FUZZ_TIME      ?= 30s
+FUZZ_TIME_EXT  ?= 10m
+
+## fuzz: run all Fuzz* targets for FUZZ_TIME each (default 30s — quick CI smoke-test)
+fuzz:
+	@for pkg in $$(go list $(FUZZ_PACKAGES)); do \
+	  targets=$$(go test -list 'Fuzz.*' "$$pkg" 2>/dev/null | grep '^Fuzz' || true); \
+	  for target in $$targets; do \
+	    echo "→ $$pkg/$$target ($(FUZZ_TIME))"; \
+	    go test -run='^$$' -fuzz="^$${target}$$" -fuzztime="$(FUZZ_TIME)" "$$pkg"; \
+	  done; \
+	done
+
+## fuzz-extended: run all Fuzz* targets for FUZZ_TIME_EXT each (default 10m — deep weekly run)
+fuzz-extended: FUZZ_TIME=$(FUZZ_TIME_EXT)
+fuzz-extended: fuzz
+
+## help: print available targets
+help:
+	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/## //'

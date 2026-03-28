@@ -1,0 +1,132 @@
+name: CI
+
+# Triggers: every PR and every push to main.
+# Job dependency graph:
+#
+#   secret-scan ─┐
+#   fmt ─────────┼─→ lint ─┐
+#                └─→ test ──┴─→ container-test ─→ container-build
+#
+# Any failure blocks all downstream jobs.
+# GHCR push only runs on main of the origin repo (not fork PRs).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.25.8"
+  GOLANGCI_LINT_VERSION: "v1.57.2"
+  IMAGE: ${{ github.event.repository.name }}
+
+jobs:
+
+  # ── 1. Secret scan ─────────────────────────────────────────────────────────
+  # Runs independently — credential leaks block everything else immediately.
+  secret-scan:
+    name: Secret Scan
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-gitleaks.yml@c3e3e0a44d4b79697f1babaa9bf287d1b264da52
+    with:
+      working-directory: "."
+      scan-history: true
+      upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+
+  fmt:
+    name: Format (gofmt)
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
+    with:
+      go-version: "1.25.8"
+      working-directory: "."
+
+  # ── 3. Vet + Lint ──────────────────────────────────────────────────────────
+  lint:
+    name: Lint (vet + golangci-lint)
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
+        with:
+          version: v1.64.8
+          install-mode: goinstall
+          args: --path-prefix=. --timeout=5m
+
+  # ── 4. Test + Coverage + Vulnerability scan ────────────────────────────────
+  test:
+    name: Test
+    needs: [fmt]
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
+    with:
+      go-version: "1.25.8"
+      working-directory: "."
+      test-timeout: "120s"
+      run-govulncheck: true
+      coverage-artifact-name: "coverage"
+
+  # ── 5. Container test stage ────────────────────────────────────────────────
+  # Builds the 'test' Containerfile stage which re-runs tests inside the same
+  # base image used in production — catches base-image / runtime divergence.
+  container-test:
+    name: Container (test stage)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build test stage
+        run: |
+          docker build \
+            --target test \
+            --tag ${{ env.IMAGE }}:test-${{ github.sha }} \
+            --file Containerfile \
+            .
+
+  # ── 6. Container final image ───────────────────────────────────────────────
+  container-build:
+    name: Container (final + push)
+    runs-on: ubuntu-latest
+    needs: [container-test]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build final image
+        run: |
+          docker build \
+            --target final \
+            --tag ${{ env.IMAGE }}:${{ github.sha }} \
+            --file Containerfile \
+            .
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
