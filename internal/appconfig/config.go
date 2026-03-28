@@ -22,14 +22,10 @@ type Config struct {
 // ErrMissingTable is returned when no table name is configured.
 var ErrMissingTable = errors.New("CONFIGCTL_TABLE environment variable is required")
 
-// Load resolves Config from environment variables.
-// Callers may override individual fields after calling Load (e.g. from CLI flags).
-func Load() (*Config, error) {
-	table := os.Getenv("CONFIGCTL_TABLE")
-	if table == "" {
-		return nil, ErrMissingTable
-	}
-
+// LoadOptional resolves Config from environment variables without requiring
+// CONFIGCTL_TABLE. Use this when the table name will be supplied via a CLI flag.
+// Callers may override individual fields after calling LoadOptional.
+func LoadOptional() *Config {
 	region := os.Getenv("AWS_DEFAULT_REGION")
 	if region == "" {
 		region = os.Getenv("AWS_REGION")
@@ -42,11 +38,21 @@ func Load() (*Config, error) {
 
 	return &Config{
 		AWSRegion:    region,
-		TableName:    table,
+		TableName:    os.Getenv("CONFIGCTL_TABLE"),
 		SecretKey:    os.Getenv("CONFIGCTL_SECRET_KEY"),
 		OldSecretKey: os.Getenv("CONFIGCTL_OLD_SECRET_KEY"),
 		LogLevel:     level,
-	}, nil
+	}
+}
+
+// Load resolves Config from environment variables.
+// Callers may override individual fields after calling Load (e.g. from CLI flags).
+func Load() (*Config, error) {
+	cfg := LoadOptional()
+	if cfg.TableName == "" {
+		return nil, ErrMissingTable
+	}
+	return cfg, nil
 }
 
 // RequireSecretKey returns an error if SecretKey is not set.

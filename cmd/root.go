@@ -82,15 +82,7 @@ func initDeps(ctx context.Context, gf *globalFlags, d *deps) error {
 		if gf.table == "" {
 			return err
 		}
-		cfg = &appconfig.Config{
-			TableName: gf.table,
-			LogLevel:  "info",
-		}
-		// Reload from env for other fields.
-		loaded, lerr := appconfig.Load()
-		if lerr == nil {
-			cfg = loaded
-		}
+		cfg = appconfig.LoadOptional()
 	}
 
 	// CLI flags override env vars.
