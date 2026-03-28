@@ -29,7 +29,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 # It is never pushed or run in production.
 FROM builder AS test
 
-RUN go test ./... -count=1 -race
+# Note: -race requires CGO (and a C toolchain). We keep this stage lightweight
+# and deterministic, and rely on the non-container CI job for race detection.
+RUN go test ./... -count=1
 
 # ─── final ───────────────────────────────────────────────────────────────────
 FROM gcr.io/distroless/static-debian12:nonroot AS final

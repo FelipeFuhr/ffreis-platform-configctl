@@ -1,0 +1,7 @@
+organization=felipefuhr
+projectKey=FelipeFuhr_ffreis-platform-configctl
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.84103
+dashboardUrl=https://sonarcloud.io/dashboard?id=FelipeFuhr_ffreis-platform-configctl
+ceTaskId=AZ02OT7wX_FO75NgohFD
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZ02OT7wX_FO75NgohFD
