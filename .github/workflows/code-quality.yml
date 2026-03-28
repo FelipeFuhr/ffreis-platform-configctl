@@ -25,9 +25,8 @@ jobs:
     # Default: runs. If SONAR_TOKEN or SONAR_ORGANIZATION are missing, fails
     # explicitly with instructions — never silently passes.
     #
-    # If SonarCloud isn't configured for this repo, skip rather than failing
-    # the entire CI run.
-    if: vars.SONAR_ENABLED != 'false' && vars.SONAR_ORGANIZATION != '' && secrets.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+    # Skip running on forked PRs (secrets are not available).
+    if: vars.SONAR_ENABLED != 'false' && secrets.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
 
     steps:
       - uses: actions/checkout@v4
@@ -50,15 +49,11 @@ jobs:
           if [ -z "${SONAR_TOKEN}" ]; then
             missing="${missing}  • SONAR_TOKEN (secret): your SonarCloud token — sonarcloud.io → My Account → Security\n"
           fi
-          if [ -z "${{ vars.SONAR_ORGANIZATION }}" ]; then
-            missing="${missing}  • SONAR_ORGANIZATION (variable): your SonarCloud organization slug\n"
-          fi
           if [ -n "${missing}" ]; then
             echo "::error title=SonarCloud not configured::Missing configuration:"
             printf "%b" "${missing}"
             echo ""
             echo "Add secrets: Settings → Secrets and variables → Actions → New repository secret"
-            echo "Add variables: Settings → Secrets and variables → Actions → Variables tab"
             echo "To skip this job entirely: Settings → Variables → add SONAR_ENABLED=false"
             exit 1
           fi
@@ -82,7 +77,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || github.event.repository.name }}
-            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION || github.repository_owner }}
             -Dsonar.go.coverage.reportPaths=coverage.out
             -Dsonar.sources=.
             -Dsonar.exclusions=vendor/**,**/*_test.go
