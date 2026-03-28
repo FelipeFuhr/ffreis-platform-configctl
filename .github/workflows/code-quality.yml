@@ -24,7 +24,10 @@ jobs:
     # Set repository variable SONAR_ENABLED=false to skip this job entirely.
     # Default: runs. If SONAR_TOKEN or SONAR_ORGANIZATION are missing, fails
     # explicitly with instructions — never silently passes.
-    if: vars.SONAR_ENABLED != 'false'
+    #
+    # If SonarCloud isn't configured for this repo, skip rather than failing
+    # the entire CI run.
+    if: vars.SONAR_ENABLED != 'false' && vars.SONAR_ORGANIZATION != '' && secrets.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
 
     steps:
       - uses: actions/checkout@v4
