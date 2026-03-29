@@ -49,6 +49,16 @@ jobs:
           if [ -z "${SONAR_TOKEN}" ]; then
             missing="${missing}  • SONAR_TOKEN (secret): your SonarCloud token — sonarcloud.io → My Account → Security\n"
           fi
+          if [ ! -f "sonar-project.properties" ]; then
+            missing="${missing}  • sonar-project.properties (file): required to define sonar.projectKey and sonar.organization\n"
+          else
+            if ! grep -qE '^[[:space:]]*sonar\\.projectKey=' sonar-project.properties; then
+              missing="${missing}  • sonar.projectKey (in sonar-project.properties): project key must exist in SonarCloud\n"
+            fi
+            if ! grep -qE '^[[:space:]]*sonar\\.organization=' sonar-project.properties; then
+              missing="${missing}  • sonar.organization (in sonar-project.properties): SonarCloud organization slug\n"
+            fi
+          fi
           if [ -n "${missing}" ]; then
             echo "::error title=SonarCloud not configured::Missing configuration:"
             printf "%b" "${missing}"
@@ -76,8 +86,6 @@ jobs:
           SONAR_HOST_URL: https://sonarcloud.io
         with:
           args: >
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || github.event.repository.name }}
-            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION || github.repository_owner }}
             -Dsonar.go.coverage.reportPaths=coverage.out
             -Dsonar.sources=.
             -Dsonar.exclusions=vendor/**,**/*_test.go
