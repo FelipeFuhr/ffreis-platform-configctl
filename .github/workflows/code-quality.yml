@@ -9,6 +9,7 @@ on:
       - '.github/workflows/code-quality.yml'
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,7 +25,9 @@ jobs:
     # Set repository variable SONAR_ENABLED=false to skip this job entirely.
     # Default: runs. If SONAR_TOKEN or SONAR_ORGANIZATION are missing, fails
     # explicitly with instructions — never silently passes.
-    if: vars.SONAR_ENABLED != 'false'
+    #
+    # Skip running on forked PRs (secrets are not available).
+    if: vars.SONAR_ENABLED != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
 
     steps:
       - uses: actions/checkout@v4
@@ -47,15 +50,21 @@ jobs:
           if [ -z "${SONAR_TOKEN}" ]; then
             missing="${missing}  • SONAR_TOKEN (secret): your SonarCloud token — sonarcloud.io → My Account → Security\n"
           fi
-          if [ -z "${{ vars.SONAR_ORGANIZATION }}" ]; then
-            missing="${missing}  • SONAR_ORGANIZATION (variable): your SonarCloud organization slug\n"
+          if [ ! -f "sonar-project.properties" ]; then
+            missing="${missing}  • sonar-project.properties (file): required to define sonar.projectKey and sonar.organization\n"
+          else
+            if ! grep -qE '^[[:space:]]*sonar[.]projectKey=' sonar-project.properties; then
+              missing="${missing}  • sonar.projectKey (in sonar-project.properties): project key must exist in SonarCloud\n"
+            fi
+            if ! grep -qE '^[[:space:]]*sonar[.]organization=' sonar-project.properties; then
+              missing="${missing}  • sonar.organization (in sonar-project.properties): SonarCloud organization slug\n"
+            fi
           fi
           if [ -n "${missing}" ]; then
             echo "::error title=SonarCloud not configured::Missing configuration:"
             printf "%b" "${missing}"
             echo ""
             echo "Add secrets: Settings → Secrets and variables → Actions → New repository secret"
-            echo "Add variables: Settings → Secrets and variables → Actions → Variables tab"
             echo "To skip this job entirely: Settings → Variables → add SONAR_ENABLED=false"
             exit 1
           fi
@@ -78,8 +87,6 @@ jobs:
           SONAR_HOST_URL: https://sonarcloud.io
         with:
           args: >
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || github.event.repository.name }}
-            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
             -Dsonar.go.coverage.reportPaths=coverage.out
             -Dsonar.sources=.
             -Dsonar.exclusions=vendor/**,**/*_test.go
