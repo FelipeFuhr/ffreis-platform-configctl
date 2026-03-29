@@ -29,6 +29,7 @@ func newBackupExportCmd(d *deps, gf *globalFlags) *cobra.Command {
 				backupExportOpts{project: project, env: env, outputPath: output, includeSecrets: includeSecrets},
 				os.Stdout,
 				os.WriteFile,
+				callerIdentity,
 			)
 		},
 	}
@@ -53,6 +54,7 @@ func runBackupExport(
 	opts backupExportOpts,
 	stdout io.Writer,
 	writeFile func(string, []byte, os.FileMode) error,
+	exportedBy func(context.Context, *deps) string,
 ) error {
 	if err := requireProjectEnv(opts.project, opts.env); err != nil {
 		return err
@@ -61,7 +63,7 @@ func runBackupExport(
 		return err
 	}
 
-	bf, err := exportBackupFile(ctx, d, opts.project, opts.env, opts.includeSecrets)
+	bf, err := exportBackupFile(ctx, d, opts.project, opts.env, opts.includeSecrets, exportedBy(ctx, d))
 	if err != nil {
 		return err
 	}
@@ -93,13 +95,13 @@ func requireSecretKeyIfNeeded(cfg *appconfig.Config, includeSecrets bool) error 
 	return cfg.RequireSecretKey()
 }
 
-func exportBackupFile(ctx context.Context, d *deps, project, env string, includeSecrets bool) (*backup.BackupFile, error) {
+func exportBackupFile(ctx context.Context, d *deps, project, env string, includeSecrets bool, exportedBy string) (*backup.BackupFile, error) {
 	const toolVersion = "dev"
 	exporter := backup.NewExporter(d.store)
 	bf, err := exporter.Export(ctx, project, env, backup.ExportOptions{
 		IncludeSecrets: includeSecrets,
 		ToolVersion:    toolVersion,
-		ExportedBy:     callerIdentity(ctx, d),
+		ExportedBy:     exportedBy,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("export: %w", err)
