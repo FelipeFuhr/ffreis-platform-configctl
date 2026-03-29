@@ -9,7 +9,8 @@ has_error=0
 common_require_git_repo
 
 is_allowlisted() {
-  common_is_allowlisted_path "$1"
+  local path="$1"
+  common_is_allowlisted_path "$path"
   return $?
 }
 

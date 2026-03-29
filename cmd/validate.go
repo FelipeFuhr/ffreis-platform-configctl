@@ -23,7 +23,7 @@ func newValidateCmd(d *deps, gf *globalFlags) *cobra.Command {
 		Short: "Validate all config items against built-in or custom rules",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runValidate(cmd.Context(), d.store, d.log, gf.output, project, env, os.Stdout, os.Stderr)
+			return runValidate(cmd.Context(), d.store, d.log, validateOpts{project: project, env: env, outputFormat: gf.output}, os.Stdout, os.Stderr)
 		},
 	}
 
@@ -37,19 +37,24 @@ type validateJSONErr struct {
 	Msg  string `json:"msg"`
 }
 
+type validateOpts struct {
+	project      string
+	env          string
+	outputFormat string
+}
+
 func runValidate(
 	ctx context.Context,
 	st store.Store,
 	log logger.Logger,
-	outputFormat string,
-	project, env string,
+	opts validateOpts,
 	stdout, stderr io.Writer,
 ) error {
-	if err := requireProjectEnv(project, env); err != nil {
+	if err := requireProjectEnv(opts.project, opts.env); err != nil {
 		return err
 	}
 
-	items, err := st.List(ctx, project, env, store.ItemTypeConfig)
+	items, err := st.List(ctx, opts.project, opts.env, store.ItemTypeConfig)
 	if err != nil {
 		return fmt.Errorf("list configs: %w", err)
 	}
@@ -62,7 +67,7 @@ func runValidate(
 
 	log.Warn("validation failed", zap.Int("violations", len(errs)))
 
-	if outputFormat == formatJSON {
+	if opts.outputFormat == formatJSON {
 		if err := writeValidationErrorsJSON(stdout, errs); err != nil {
 			return err
 		}

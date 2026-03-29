@@ -26,10 +26,7 @@ func newBackupExportCmd(d *deps, gf *globalFlags) *cobra.Command {
 			return runBackupExport(
 				cmd.Context(),
 				d,
-				project,
-				env,
-				output,
-				includeSecrets,
+				backupExportOpts{project: project, env: env, outputPath: output, includeSecrets: includeSecrets},
 				os.Stdout,
 				os.WriteFile,
 			)
@@ -43,22 +40,28 @@ func newBackupExportCmd(d *deps, gf *globalFlags) *cobra.Command {
 	return cmd
 }
 
+type backupExportOpts struct {
+	project        string
+	env            string
+	outputPath     string
+	includeSecrets bool
+}
+
 func runBackupExport(
 	ctx context.Context,
 	d *deps,
-	project, env, outputPath string,
-	includeSecrets bool,
+	opts backupExportOpts,
 	stdout io.Writer,
 	writeFile func(string, []byte, os.FileMode) error,
 ) error {
-	if err := requireProjectEnv(project, env); err != nil {
+	if err := requireProjectEnv(opts.project, opts.env); err != nil {
 		return err
 	}
-	if err := requireSecretKeyIfNeeded(d.cfg, includeSecrets); err != nil {
+	if err := requireSecretKeyIfNeeded(d.cfg, opts.includeSecrets); err != nil {
 		return err
 	}
 
-	bf, err := exportBackupFile(ctx, d, project, env, includeSecrets)
+	bf, err := exportBackupFile(ctx, d, opts.project, opts.env, opts.includeSecrets)
 	if err != nil {
 		return err
 	}
@@ -68,16 +71,16 @@ func runBackupExport(
 		return fmt.Errorf("marshal backup: %w", err)
 	}
 
-	if isStdoutOutput(outputPath) {
+	if isStdoutOutput(opts.outputPath) {
 		fmt.Fprintln(stdout, string(raw))
 		return nil
 	}
 
-	if err := writeFile(outputPath, append(raw, '\n'), 0600); err != nil {
-		return fmt.Errorf("write file %s: %w", outputPath, err)
+	if err := writeFile(opts.outputPath, append(raw, '\n'), 0600); err != nil {
+		return fmt.Errorf("write file %s: %w", opts.outputPath, err)
 	}
 	d.log.Info("backup exported",
-		zap.String("file", outputPath),
+		zap.String("file", opts.outputPath),
 		zap.Int("items", bf.Metadata.ItemCount),
 	)
 	return nil
