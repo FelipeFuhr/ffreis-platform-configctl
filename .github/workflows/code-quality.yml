@@ -52,10 +52,10 @@ jobs:
           if [ ! -f "sonar-project.properties" ]; then
             missing="${missing}  • sonar-project.properties (file): required to define sonar.projectKey and sonar.organization\n"
           else
-            if ! grep -qE '^[[:space:]]*sonar\\.projectKey=' sonar-project.properties; then
+            if ! grep -qE '^[[:space:]]*sonar[.]projectKey=' sonar-project.properties; then
               missing="${missing}  • sonar.projectKey (in sonar-project.properties): project key must exist in SonarCloud\n"
             fi
-            if ! grep -qE '^[[:space:]]*sonar\\.organization=' sonar-project.properties; then
+            if ! grep -qE '^[[:space:]]*sonar[.]organization=' sonar-project.properties; then
               missing="${missing}  • sonar.organization (in sonar-project.properties): SonarCloud organization slug\n"
             fi
           fi
