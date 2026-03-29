@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,18 @@ import (
 	"github.com/ffreis/platform-configctl/internal/diff"
 	"github.com/ffreis/platform-configctl/internal/store"
 )
+
+func TestRunDiff_InputRequired(t *testing.T) {
+	t.Parallel()
+
+	d := &deps{log: noopLogger{}, store: fakeStore{}}
+	gf := &globalFlags{output: "text"}
+
+	var out bytes.Buffer
+	if err := runDiff(context.Background(), d, gf, "proj", "dev", "", &out); err == nil {
+		t.Fatalf("error = nil, want error")
+	}
+}
 
 func TestLoadBackupFile_ChecksumMismatch(t *testing.T) {
 	t.Parallel()
@@ -39,6 +52,30 @@ func TestLoadBackupFile_ChecksumMismatch(t *testing.T) {
 	_, err = loadBackupFile(path)
 	if err != backup.ErrChecksumMismatch {
 		t.Fatalf("loadBackupFile error = %v, want %v", err, backup.ErrChecksumMismatch)
+	}
+}
+
+func TestLoadBackupFile_ReadFileError(t *testing.T) {
+	t.Parallel()
+
+	_, err := loadBackupFile("does-not-exist.json")
+	if err == nil {
+		t.Fatalf("error = nil, want error")
+	}
+}
+
+func TestLoadBackupFile_ParseError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "backup.json")
+	if err := os.WriteFile(path, []byte("{not-json"), 0600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	_, err := loadBackupFile(path)
+	if err == nil {
+		t.Fatalf("error = nil, want error")
 	}
 }
 
@@ -84,6 +121,37 @@ func TestRunDiff_NoChanges(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty (no changes)", out.String())
+	}
+}
+
+func TestLoadLiveItems_ConfigError(t *testing.T) {
+	t.Parallel()
+
+	st := fakeStore{
+		listFn: func(context.Context, string, string, store.ItemType) ([]*store.Item, error) {
+			return nil, errors.New("boom")
+		},
+	}
+	_, err := loadLiveItems(context.Background(), st, "proj", "dev")
+	if err == nil {
+		t.Fatalf("error = nil, want error")
+	}
+}
+
+func TestLoadLiveItems_SecretError(t *testing.T) {
+	t.Parallel()
+
+	st := fakeStore{
+		listFn: func(context.Context, string, string, store.ItemType) ([]*store.Item, error) {
+			if itemType == store.ItemTypeConfig {
+				return []*store.Item{}, nil
+			}
+			return nil, errors.New("boom")
+		},
+	}
+	_, err := loadLiveItems(context.Background(), st, "proj", "dev")
+	if err == nil {
+		t.Fatalf("error = nil, want error")
 	}
 }
 
@@ -136,4 +204,3 @@ func TestRunDiff_WithChanges_JSON(t *testing.T) {
 		t.Fatalf("expected changes, got none")
 	}
 }
-

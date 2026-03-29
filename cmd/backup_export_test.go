@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 
@@ -176,3 +177,94 @@ func TestRunBackupExport_WritesToFile(t *testing.T) {
 	}
 }
 
+func TestRunBackupExport_RequiresProjectEnv(t *testing.T) {
+	t.Parallel()
+
+	d := &deps{cfg: &appconfig.Config{}, log: noopLogger{}, store: fakeStore{}}
+
+	var stdout bytes.Buffer
+	err := runBackupExport(
+		context.Background(),
+		d,
+		backupExportOpts{project: "", env: "dev", outputPath: "-", includeSecrets: false},
+		&stdout,
+		func(string, []byte, os.FileMode) error { return nil },
+		func(context.Context, *deps) string { return "tester" },
+	)
+	if err == nil {
+		t.Fatalf("error = nil, want error")
+	}
+}
+
+func TestRunBackupExport_SecretKeyRequiredWhenIncludingSecrets(t *testing.T) {
+	t.Parallel()
+
+	st := fakeStore{
+		listFn: func(context.Context, string, string, store.ItemType) ([]*store.Item, error) {
+			return []*store.Item{}, nil
+		},
+	}
+	d := &deps{cfg: &appconfig.Config{}, log: noopLogger{}, store: st}
+
+	var stdout bytes.Buffer
+	err := runBackupExport(
+		context.Background(),
+		d,
+		backupExportOpts{project: "proj", env: "dev", outputPath: "-", includeSecrets: true},
+		&stdout,
+		func(string, []byte, os.FileMode) error { return nil },
+		func(context.Context, *deps) string { return "tester" },
+	)
+	if err == nil {
+		t.Fatalf("error = nil, want error")
+	}
+}
+
+func TestRunBackupExport_ExportError(t *testing.T) {
+	t.Parallel()
+
+	st := fakeStore{
+		listFn: func(context.Context, string, string, store.ItemType) ([]*store.Item, error) {
+			return nil, errors.New("boom")
+		},
+	}
+	d := &deps{cfg: &appconfig.Config{}, log: noopLogger{}, store: st}
+
+	var stdout bytes.Buffer
+	err := runBackupExport(
+		context.Background(),
+		d,
+		backupExportOpts{project: "proj", env: "dev", outputPath: "-", includeSecrets: false},
+		&stdout,
+		func(string, []byte, os.FileMode) error { return nil },
+		func(context.Context, *deps) string { return "tester" },
+	)
+	if err == nil || err.Error() == "" {
+		t.Fatalf("error = %v, want non-nil", err)
+	}
+}
+
+func TestRunBackupExport_WriteFileError(t *testing.T) {
+	t.Parallel()
+
+	st := fakeStore{
+		listFn: func(context.Context, string, string, store.ItemType) ([]*store.Item, error) {
+			return []*store.Item{}, nil
+		},
+	}
+	d := &deps{cfg: &appconfig.Config{}, log: noopLogger{}, store: st}
+
+	var stdout bytes.Buffer
+	writeErr := errors.New("nope")
+	err := runBackupExport(
+		context.Background(),
+		d,
+		backupExportOpts{project: "proj", env: "dev", outputPath: "out.json", includeSecrets: false},
+		&stdout,
+		func(string, []byte, os.FileMode) error { return writeErr },
+		func(context.Context, *deps) string { return "tester" },
+	)
+	if err == nil || !errors.Is(err, writeErr) {
+		t.Fatalf("error = %v, want wrapped %v", err, writeErr)
+	}
+}

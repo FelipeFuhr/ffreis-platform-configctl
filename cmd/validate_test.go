@@ -4,11 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/ffreis/platform-configctl/internal/store"
 )
+
+type errWriter struct{}
+
+func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
 func TestRunValidate_Pass(t *testing.T) {
 	t.Parallel()
@@ -36,6 +41,29 @@ func TestRunValidate_Pass(t *testing.T) {
 	}
 	if stdout.Len() != 0 || stderr.Len() != 0 {
 		t.Fatalf("unexpected output stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunValidate_ListError(t *testing.T) {
+	t.Parallel()
+
+	st := fakeStore{
+		listFn: func(context.Context, string, string, store.ItemType) ([]*store.Item, error) {
+			return nil, errors.New("boom")
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(
+		context.Background(),
+		st,
+		noopLogger{},
+		validateOpts{project: "proj", env: "dev", outputFormat: "text"},
+		&stdout,
+		&stderr,
+	)
+	if err == nil {
+		t.Fatalf("error = nil, want error")
 	}
 }
 
@@ -105,3 +133,25 @@ func TestRunValidate_Fail_JSON(t *testing.T) {
 	}
 }
 
+func TestRunValidate_Fail_JSON_WriteError(t *testing.T) {
+	t.Parallel()
+
+	st := fakeStore{
+		listFn: func(context.Context, string, string, store.ItemType) ([]*store.Item, error) {
+			return []*store.Item{{Project: "proj", Env: "dev", Key: "k1", Value: "", Type: store.ItemTypeConfig, Encrypted: false}}, nil
+		},
+	}
+
+	var stderr bytes.Buffer
+	err := runValidate(
+		context.Background(),
+		st,
+		noopLogger{},
+		validateOpts{project: "proj", env: "dev", outputFormat: formatJSON},
+		errWriter{},
+		&stderr,
+	)
+	if err == nil {
+		t.Fatalf("error = nil, want error")
+	}
+}
