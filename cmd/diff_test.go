@@ -142,7 +142,7 @@ func TestLoadLiveItems_SecretError(t *testing.T) {
 	t.Parallel()
 
 	st := fakeStore{
-		listFn: func(context.Context, string, string, store.ItemType) ([]*store.Item, error) {
+		listFn: func(ctx context.Context, project, env string, itemType store.ItemType) ([]*store.Item, error) {
 			if itemType == store.ItemTypeConfig {
 				return []*store.Item{}, nil
 			}
