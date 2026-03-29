@@ -26,7 +26,7 @@ jobs:
     # explicitly with instructions — never silently passes.
     #
     # Skip running on forked PRs (secrets are not available).
-    if: vars.SONAR_ENABLED != 'false' && secrets.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+    if: vars.SONAR_ENABLED != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
 
     steps:
       - uses: actions/checkout@v4
