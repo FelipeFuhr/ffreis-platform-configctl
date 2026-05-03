@@ -47,3 +47,9 @@ export CONFIGCTL_TABLE=platform-config CONFIGCTL_SECRET_KEY="passphrase"
 platform-configctl config get database_url --project payments --env prod
 platform-configctl secret set api_key --project payments --env prod  # reads from stdin
 ```
+
+## Keeping this file current
+
+- **If you discover a fact not reflected here:** add it before finishing your task.
+- **If something here is wrong or outdated:** correct it in the same commit as the code change.
+- **If you rename a file, command, or concept referenced here:** update the reference.
