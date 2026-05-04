@@ -1,11 +1,9 @@
-version: "2"
-
 run:
   timeout: 5m
   tests: true
 
 linters:
-  default: none
+  disable-all: true
   enable:
     # Correctness
     - govet          # go vet (shadowed vars, printf mismatches, etc.)
@@ -28,32 +26,29 @@ linters:
     # Maintainability
     - godot          # comments must end in a period
     - nolintlint     # nolint directives must be specific and justified
-  settings:
-    govet:
-      enable:
-        - copylocks
-    errcheck:
-      check-type-assertions: true
-      check-blank: false  # `_ = expr` is intentional in tests
-    godot:
-      scope: declarations
-      capital: false
-  exclusions:
-    rules:
-      - path: "_test\\.go"
-        linters: [errcheck, gosec]
-      - path: "vendor/"
-        linters: [all]
 
-formatters:
-  enable:
+    # Formatting
     - gofmt
     - goimports
-  settings:
-    goimports:
-      local-prefixes:
-        - github.com/ffreis
+
+linters-settings:
+  govet:
+    enable:
+      - copylocks
+  errcheck:
+    check-type-assertions: true
+    check-blank: false  # `_ = expr` is intentional
+  godot:
+    scope: declarations
+    capital: false
+  goimports:
+    local-prefixes: github.com/ffreis
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-rules:
+    - path: "_test\\.go"
+      linters: [errcheck, gosec]
+    - path: "vendor/"
+      linters: [errcheck, gosec, govet, staticcheck, ineffassign, unused, misspell, bodyclose, noctx, copyloopvar, godot, nolintlint, gofmt, goimports]
