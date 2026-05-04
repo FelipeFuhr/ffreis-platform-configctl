@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -74,7 +75,12 @@ func runBackupExport(
 	}
 
 	if isStdoutOutput(opts.outputPath) {
-		fmt.Fprintln(stdout, string(raw))
+		if _, err := stdout.Write(raw); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(stdout, "\n"); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -96,11 +102,10 @@ func requireSecretKeyIfNeeded(cfg *appconfig.Config, includeSecrets bool) error 
 }
 
 func exportBackupFile(ctx context.Context, d *deps, project, env string, includeSecrets bool, exportedBy string) (*backup.BackupFile, error) {
-	const toolVersion = "dev"
 	exporter := backup.NewExporter(d.store)
 	bf, err := exporter.Export(ctx, project, env, backup.ExportOptions{
 		IncludeSecrets: includeSecrets,
-		ToolVersion:    toolVersion,
+		ToolVersion:    resolvedVersion(),
 		ExportedBy:     exportedBy,
 	})
 	if err != nil {
@@ -111,4 +116,12 @@ func exportBackupFile(ctx context.Context, d *deps, project, env string, include
 
 func isStdoutOutput(outputPath string) bool {
 	return outputPath == "" || outputPath == "-"
+}
+
+func resolvedVersion() string {
+	v := strings.TrimSpace(version)
+	if v == "" {
+		return "dev"
+	}
+	return v
 }

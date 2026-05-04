@@ -39,7 +39,8 @@ override.tf.json
 terraform.rc
 
 # Build output
-platform-configctl
+/bin/platform-configctl
+/platform-configctl
 dist/
 
 # Go build cache

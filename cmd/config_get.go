@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -29,16 +28,16 @@ func newConfigGetCmd(d *deps, gf *globalFlags) *cobra.Command {
 			if err != nil {
 				if errors.Is(err, store.ErrNotFound) {
 					d.log.Warn("key not found", zap.String("key", key))
-					os.Exit(2)
+					return &ExitError{Code: exitNotFound}
 				}
 				return fmt.Errorf("get config: %w", err)
 			}
 
 			switch gf.output {
 			case formatJSON:
-				return json.NewEncoder(os.Stdout).Encode(map[string]string{keyValue: item.Value})
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]string{keyValue: item.Value})
 			default:
-				fmt.Fprintln(os.Stdout, item.Value)
+				newCommandOutput(cmd, d.ui).Line(item.Value)
 			}
 			return nil
 		},

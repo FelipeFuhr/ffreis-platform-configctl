@@ -214,8 +214,9 @@ make check         # tidy + vet + test-short
 ## Architecture
 
 ```
-main.go
-cmd/                 Cobra CLI boundary — no business logic
+cmd/
+  platform-configctl/main.go  Thin entry point
+  ...                         Cobra CLI boundary — no business logic
 internal/
   appconfig/         Config resolution from env + flags
   store/             DynamoDB storage abstraction (Store interface)

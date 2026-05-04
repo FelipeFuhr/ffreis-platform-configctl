@@ -3,8 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -41,19 +39,22 @@ func newSecretListCmd(d *deps, gf *globalFlags) *cobra.Command {
 						"updated_by": item.UpdatedBy,
 					})
 				}
-				return json.NewEncoder(os.Stdout).Encode(out)
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 			case "table":
-				w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-				fmt.Fprintln(w, "KEY\tKEY_ID\tVERSION\tUPDATED_AT")
+				rows := make([][]string, 0, len(items))
 				for _, item := range items {
-					fmt.Fprintf(w, "%s\t%s\t%d\t%s\n",
-						item.Key, item.KeyID, item.Version,
-						item.UpdatedAt.Format("2006-01-02T15:04:05Z"))
+					rows = append(rows, []string{
+						item.Key,
+						item.KeyID,
+						fmt.Sprintf("%d", item.Version),
+						item.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+					})
 				}
-				return w.Flush()
+				return newCommandOutput(cmd, d.ui).Table([]string{"KEY", "KEY_ID", "VERSION", "UPDATED_AT"}, rows)
 			default:
+				out := newCommandOutput(cmd, d.ui)
 				for _, item := range items {
-					fmt.Fprintf(os.Stdout, "%s=***\n", item.Key)
+					out.Line(item.Key + "=***")
 				}
 			}
 			return nil
