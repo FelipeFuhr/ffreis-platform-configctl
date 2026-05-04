@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -24,7 +23,7 @@ func newSecretGetCmd(d *deps, gf *globalFlags) *cobra.Command {
 		Short: "Get a secret (metadata only unless --reveal is set)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSecretGet(cmd.Context(), d, gf.output, project, env, args[0], reveal, os.Stdout)
+			return runSecretGet(cmd.Context(), d, gf.output, project, env, args[0], reveal, cmd.OutOrStdout())
 		},
 	}
 
@@ -68,7 +67,7 @@ func getSecretItem(ctx context.Context, d *deps, project, env, key string) (*sto
 	}
 	if errors.Is(err, store.ErrNotFound) {
 		d.log.Warn("secret not found", zap.String("key", key))
-		os.Exit(2)
+		return nil, &ExitError{Code: exitNotFound}
 	}
 	return nil, fmt.Errorf("get secret: %w", err)
 }
