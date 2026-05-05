@@ -228,6 +228,9 @@ func newVersionCmd(gf *globalFlags, d *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print build information",
+		// Override the root PersistentPreRunE so that version can be run
+		// without AWS credentials or CONFIGCTL_TABLE being set.
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error { return nil },
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			v := strings.TrimSpace(version)
 			if v == "" {
