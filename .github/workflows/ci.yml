@@ -32,7 +32,6 @@ jobs:
   # ── 1. Secret scan ─────────────────────────────────────────────────────────
   # Runs independently — credential leaks block everything else immediately.
   secret-scan:
-    timeout-minutes: 30
     name: Secret Scan
     permissions:
       contents: read
@@ -45,7 +44,6 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
   fmt:
-    timeout-minutes: 15
     name: Format (gofmt)
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
     with:
@@ -85,7 +83,6 @@ jobs:
 
   # ── 4. Test + Coverage + Vulnerability scan ────────────────────────────────
   test:
-    timeout-minutes: 30
     if: ${{ !github.event.pull_request.draft }}
     name: Test
     needs: [fmt]
