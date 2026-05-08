@@ -32,6 +32,7 @@ jobs:
   # ── 1. Secret scan ─────────────────────────────────────────────────────────
   # Runs independently — credential leaks block everything else immediately.
   secret-scan:
+    timeout-minutes: 30
     name: Secret Scan
     permissions:
       contents: read
@@ -44,6 +45,7 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
   fmt:
+    timeout-minutes: 15
     name: Format (gofmt)
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
     with:
@@ -52,6 +54,7 @@ jobs:
 
   # ── 3. Vet + Lint ──────────────────────────────────────────────────────────
   lint:
+    timeout-minutes: 15
     name: Lint (vet + golangci-lint)
     needs: [fmt]
     runs-on: ubuntu-latest
@@ -82,6 +85,8 @@ jobs:
 
   # ── 4. Test + Coverage + Vulnerability scan ────────────────────────────────
   test:
+    timeout-minutes: 30
+    if: ${{ !github.event.pull_request.draft }}
     name: Test
     needs: [fmt]
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
@@ -96,6 +101,8 @@ jobs:
   # Builds the 'test' Containerfile stage which re-runs tests inside the same
   # base image used in production — catches base-image / runtime divergence.
   container-test:
+    timeout-minutes: 30
+    if: ${{ !github.event.pull_request.draft }}
     name: Container (test stage)
     runs-on: ubuntu-latest
     needs: [lint, test]
@@ -117,6 +124,7 @@ jobs:
 
   # ── 6. Container final image ───────────────────────────────────────────────
   container-build:
+    timeout-minutes: 30
     name: Container (final + push)
     runs-on: ubuntu-latest
     needs: [container-test]
