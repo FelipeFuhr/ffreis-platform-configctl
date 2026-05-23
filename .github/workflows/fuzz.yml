@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   fuzz:
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fuzz.yml@6a9b12a1c8b8a6a8ba0002a8077a1713ddf31be8
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fuzz.yml@a543ef895b5c2d6e4e7fe87245d440889c485b7c
     with:
       packages: "./internal/crypto/... ./internal/validate/..."
       fuzz-time: ${{ inputs.fuzz-time || '30s' }}
