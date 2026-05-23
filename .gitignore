@@ -74,3 +74,6 @@ Thumbs.db
 # Test coverage
 coverage.out
 coverage.html
+
+scripts/hooks/
+scripts/bootstrap_lefthook.sh

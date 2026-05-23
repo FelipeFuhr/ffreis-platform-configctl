@@ -40,6 +40,7 @@ jobs:
       working-directory: "."
 
   lint:
+    timeout-minutes: 15
     needs: [fmt]
     runs-on: ubuntu-latest
     permissions:
@@ -71,6 +72,7 @@ jobs:
           args: --path-prefix=. --timeout=5m
 
   test:
+    if: ${{ !github.event.pull_request.draft }}
     needs: [fmt]
     permissions:
       contents: read
