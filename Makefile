@@ -38,7 +38,7 @@ install:
 
 ## test: run all tests with race detector
 test:
-	go test ./... -v -race -count=1
+	go test ./... -v -race -shuffle=on -count=1
 
 ## test-short: run unit tests (no live AWS)
 test-short:
