@@ -22,10 +22,10 @@ func TestMaskedReturnsSentinel(t *testing.T) {
 		"db_password",
 		"AWS_SECRET_ACCESS_KEY",
 		"value",
-		"",                                // empty key still produces sentinel
-		"key.with.dots",                   // structured field names
+		"",              // empty key still produces sentinel
+		"key.with.dots", // structured field names
 		"key/with/slashes",
-		strings.Repeat("x", 256),          // long key
+		strings.Repeat("x", 256), // long key
 	}
 
 	for _, key := range cases {
