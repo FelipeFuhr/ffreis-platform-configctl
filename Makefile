@@ -38,7 +38,7 @@ install:
 
 ## test: run all tests with race detector
 test:
-	go test ./... -v -race -count=1
+	go test ./... -v -race -shuffle=on -count=1
 
 ## test-short: run unit tests (no live AWS)
 test-short:
@@ -99,8 +99,29 @@ secrets-scan-staged:
 	@command -v $(GITLEAKS) >/dev/null 2>&1 || (echo "Missing tool: $(GITLEAKS). Install: https://github.com/gitleaks/gitleaks#installing" && exit 1)
 	$(GITLEAKS) protect --staged --redact
 
-## lefthook-bootstrap: download lefthook binary into ./.bin
-lefthook-bootstrap:
+## 
+PLATFORM_STANDARDS_SHA := b6a9ef92199954e3da5b80814321cb92f649fb81
+PLATFORM_STANDARDS_RAW := https://raw.githubusercontent.com/FelipeFuhr/ffreis-platform-standards
+
+HOOK_SCRIPTS := \
+	check_merge_markers.sh \
+	check_large_files.sh \
+	check_binary_files.sh \
+	check_commit_msg.sh \
+	check_required_tools.sh
+
+hook-scripts: ## Download bootstrap + hook scripts from ffreis-platform-standards
+	@mkdir -p scripts/hooks
+	@curl -fsSL "$(PLATFORM_STANDARDS_RAW)/$(PLATFORM_STANDARDS_SHA)/lefthook/bootstrap_lefthook.sh" \
+		-o scripts/bootstrap_lefthook.sh && chmod +x scripts/bootstrap_lefthook.sh
+	@for script in $(HOOK_SCRIPTS); do \
+		curl -fsSL "$(PLATFORM_STANDARDS_RAW)/$(PLATFORM_STANDARDS_SHA)/lefthook/scripts/$$script" \
+			-o "scripts/hooks/$$script" && chmod +x "scripts/hooks/$$script"; \
+	done
+	@echo "Hook scripts downloaded."
+
+lefthook-bootstrap: hook-scripts download lefthook binary into ./.bin
+lefthook-bootstrap: hook-scripts
 	LEFTHOOK_VERSION="$(LEFTHOOK_VERSION)" BIN_DIR="$(LEFTHOOK_DIR)" bash ./scripts/bootstrap_lefthook.sh
 
 ## lefthook-install: install git hooks (runs bootstrap first)
