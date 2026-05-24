@@ -14,11 +14,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   fuzz:
+    permissions:
+      contents: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fuzz.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
     with:
       packages: "./internal/crypto/... ./internal/validate/..."
@@ -27,10 +26,10 @@ jobs:
   notify-failure:
     needs: [fuzz]
     if: failure()
-    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       issues: write
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
