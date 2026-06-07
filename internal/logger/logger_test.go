@@ -4,17 +4,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/logger"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/ffreis/platform-configctl/internal/logger"
 )
 
 // TestMaskedReturnsSentinel verifies that Masked always returns the "***"
 // sentinel regardless of the key. This is the single invariant secret-handling
 // code paths rely on: there is no plaintext secret value carried through the
 // returned zap.Field. If anyone changes Masked to ever emit anything else, this
-// catches it. (Per AGENTS.md: "Secrets are always masked as `***` in logs and
-// output. Do not add code paths that print secret values even in debug mode.")
+// catches it. Per AGENTS.md: secrets are always masked as *** in logs and
+// output; never add code paths that emit secret values even in debug mode.
 func TestMaskedReturnsSentinel(t *testing.T) {
 	cases := []string{
 		"api_key",

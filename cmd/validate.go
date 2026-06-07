@@ -87,6 +87,6 @@ func writeValidationErrorsJSON(w io.Writer, errs []validate.ValidationError) err
 
 func writeValidationErrorsText(w io.Writer, errs []validate.ValidationError) {
 	for _, e := range errs {
-		fmt.Fprintf(w, "FAIL key=%s rule=%s: %s\n", e.Key, e.Rule, e.Msg)
+		_, _ = fmt.Fprintf(w, "FAIL key=%s rule=%s: %s\n", e.Key, e.Rule, e.Msg)
 	}
 }
