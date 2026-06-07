@@ -101,11 +101,11 @@ func writeSecretGetOutput(w io.Writer, outputFormat string, item *store.Item, di
 		return json.NewEncoder(w).Encode(out)
 	}
 
-	fmt.Fprintf(w, "key:        %s\n", item.Key)
-	fmt.Fprintf(w, "value:      %s\n", displayValue)
-	fmt.Fprintf(w, "version:    %d\n", item.Version)
-	fmt.Fprintf(w, "updated_at: %s\n", item.UpdatedAt.Format("2006-01-02T15:04:05Z"))
-	fmt.Fprintf(w, "updated_by: %s\n", item.UpdatedBy)
-	fmt.Fprintf(w, "key_id:     %s\n", item.KeyID)
+	_, _ = fmt.Fprintf(w, "key:        %s\n", item.Key)
+	_, _ = fmt.Fprintf(w, "value:      %s\n", displayValue)
+	_, _ = fmt.Fprintf(w, "version:    %d\n", item.Version)
+	_, _ = fmt.Fprintf(w, "updated_at: %s\n", item.UpdatedAt.Format("2006-01-02T15:04:05Z"))
+	_, _ = fmt.Fprintf(w, "updated_by: %s\n", item.UpdatedBy)
+	_, _ = fmt.Fprintf(w, "key_id:     %s\n", item.KeyID)
 	return nil
 }

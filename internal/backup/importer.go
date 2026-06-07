@@ -42,7 +42,7 @@ func NewImporter(st store.Store) *Importer {
 
 // ImportFromFile reads a BackupFile from path and imports it.
 func (i *Importer) ImportFromFile(ctx context.Context, path string, opts ImportOptions) (*ImportResult, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // path is caller-supplied CLI argument
 	if err != nil {
 		return nil, fmt.Errorf("read file %s: %w", path, err)
 	}

@@ -66,7 +66,7 @@ func runDiff(ctx context.Context, d *deps, gf *globalFlags, project, env, inputF
 }
 
 func loadBackupFile(path string) (*backup.BackupFile, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // path is caller-supplied CLI argument
 	if err != nil {
 		return nil, fmt.Errorf("read file: %w", err)
 	}
@@ -119,12 +119,12 @@ func writeDiffOutput(w io.Writer, outputFormat string, result *diff.Result) erro
 
 func writeDiffText(w io.Writer, result *diff.Result) {
 	for _, c := range result.Added {
-		fmt.Fprintf(w, "+ [%s] %s = %s\n", c.ItemType, c.Key, c.NewValue)
+		_, _ = fmt.Fprintf(w, "+ [%s] %s = %s\n", c.ItemType, c.Key, c.NewValue)
 	}
 	for _, c := range result.Modified {
-		fmt.Fprintf(w, "~ [%s] %s: %s → %s\n", c.ItemType, c.Key, c.OldValue, c.NewValue)
+		_, _ = fmt.Fprintf(w, "~ [%s] %s: %s → %s\n", c.ItemType, c.Key, c.OldValue, c.NewValue)
 	}
 	for _, c := range result.Deleted {
-		fmt.Fprintf(w, "- [%s] %s = %s\n", c.ItemType, c.Key, c.OldValue)
+		_, _ = fmt.Fprintf(w, "- [%s] %s = %s\n", c.ItemType, c.Key, c.OldValue)
 	}
 }
