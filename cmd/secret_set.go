@@ -53,7 +53,7 @@ func runSecretSet(ctx context.Context, d *deps, project, env, key string, stdin 
 		return err
 	}
 
-	ciphertext, keyID, err := encryptSecretValue(d, project, env, plaintext)
+	ciphertext, keyID, err := encryptSecretValue(d, project, env, key, plaintext)
 	if err != nil {
 		return err
 	}
@@ -94,8 +94,8 @@ func readSecretValueFromStdin(stdin io.Reader) ([]byte, error) {
 	return plaintext, nil
 }
 
-func encryptSecretValue(d *deps, project, env string, plaintext []byte) ([]byte, string, error) {
-	enc, err := crypto.NewAESGCMEncryptor(d.cfg.SecretKey, project, env)
+func encryptSecretValue(d *deps, project, env, keyName string, plaintext []byte) ([]byte, string, error) {
+	enc, err := crypto.NewAESGCMEncryptor(d.cfg.SecretKey, project, env, keyName)
 	if err != nil {
 		return nil, "", err
 	}

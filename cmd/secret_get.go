@@ -77,11 +77,19 @@ func secretDisplayValue(d *deps, project, env string, item *store.Item, reveal b
 		return "***", nil
 	}
 
-	enc, err := crypto.NewAESGCMEncryptor(d.cfg.SecretKey, project, env)
+	enc, err := crypto.NewAESGCMEncryptor(d.cfg.SecretKey, project, env, item.Key)
 	if err != nil {
 		return "", err
 	}
 	plaintext, err := enc.Decrypt([]byte(item.Value), item.KeyID)
+	if errors.Is(err, crypto.ErrLegacyAAD) {
+		// Blob was encrypted without key-name binding. Log a migration hint and
+		// return the plaintext — the next `secret set` will re-encrypt with the
+		// current AAD automatically.
+		d.log.Warn("legacy AAD detected: re-run 'secret set' to upgrade ciphertext",
+			zap.String("key", item.Key))
+		return string(plaintext), nil
+	}
 	if err != nil {
 		return "", fmt.Errorf("decrypt secret: %w", err)
 	}

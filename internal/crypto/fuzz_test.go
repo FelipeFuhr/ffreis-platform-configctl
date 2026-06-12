@@ -12,7 +12,7 @@ import (
 //   - Arbitrary bytes must return an error (ErrDecryptionFailed or ErrKeyMismatch),
 //     not silently succeed
 func FuzzDecrypt(f *testing.F) {
-	enc, err := NewAESGCMEncryptor("seed-passphrase", "myproject", "staging")
+	enc, err := NewAESGCMEncryptor("seed-passphrase", "myproject", "staging", "api_key")
 	if err != nil {
 		f.Fatal("could not create encryptor for seeding:", err)
 	}
@@ -51,7 +51,7 @@ func FuzzEncryptDecryptRoundtrip(f *testing.F) {
 	f.Add([]byte("a very long string with special chars: !@#$%^&*()_+=-[]{}|;':\",./<>?"))
 	f.Add(bytes.Repeat([]byte("x"), 4096))
 
-	enc, err := NewAESGCMEncryptor("roundtrip-pass", "proj", "env")
+	enc, err := NewAESGCMEncryptor("roundtrip-pass", "proj", "env", "key")
 	if err != nil {
 		f.Fatal("could not create encryptor:", err)
 	}
