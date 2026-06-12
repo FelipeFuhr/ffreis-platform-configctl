@@ -28,12 +28,14 @@ type AESGCMEncryptor struct {
 	derivedKey []byte
 	keyID      string
 	aad        []byte // additional authenticated data binding ciphertext to location
+	legacyAAD  []byte // pre-v2 AAD without key name (used as fallback during migration)
 }
 
 // NewAESGCMEncryptor derives a 256-bit key from passphrase using Argon2id
-// with a deterministic salt from project+env. Returns ErrKeyUnavailable if
-// passphrase is empty.
-func NewAESGCMEncryptor(passphrase, project, env string) (*AESGCMEncryptor, error) {
+// with a deterministic salt from project+env. The keyName parameter binds the
+// ciphertext to its specific slot, preventing cross-slot transplant attacks.
+// Returns ErrKeyUnavailable if passphrase is empty.
+func NewAESGCMEncryptor(passphrase, project, env, keyName string) (*AESGCMEncryptor, error) {
 	if passphrase == "" {
 		return nil, ErrKeyUnavailable
 	}
@@ -56,13 +58,20 @@ func NewAESGCMEncryptor(passphrase, project, env string) (*AESGCMEncryptor, erro
 	h := sha256.Sum256(key)
 	keyID := fmt.Sprintf("sha256:%x", h[:16])
 
-	// AAD binds the ciphertext to its logical location.
-	aad := []byte(fmt.Sprintf("project=%s|env=%s", project, env))
+	// AAD binds the ciphertext to its logical location, including the key name
+	// to prevent cross-slot transplant attacks within the same project+env.
+	aad := []byte(fmt.Sprintf("PROJECT#%s#ENV#%s#KEY#%s", project, env, keyName))
+
+	// legacyAAD matches the pre-v2 format (no key name) used by blobs encrypted
+	// before this fix. It is only used as a fallback during Decrypt to support
+	// transparent migration of existing secrets.
+	legacyAAD := []byte(fmt.Sprintf("project=%s|env=%s", project, env))
 
 	return &AESGCMEncryptor{
 		derivedKey: key,
 		keyID:      keyID,
 		aad:        aad,
+		legacyAAD:  legacyAAD,
 	}, nil
 }
 
@@ -94,6 +103,11 @@ func (e *AESGCMEncryptor) Encrypt(plaintext []byte) ([]byte, string, error) {
 	return encoded, e.keyID, nil
 }
 
+// Decrypt decodes and authenticates ciphertext. It first tries the current AAD
+// (which includes the key name). If that fails, it falls back to the legacy AAD
+// (project+env only) to support transparent migration of existing secrets — in
+// that case it returns ErrLegacyAAD so the caller can re-encrypt with the new
+// AAD on the next write.
 func (e *AESGCMEncryptor) Decrypt(ciphertext []byte, storedKeyID string) ([]byte, error) {
 	if storedKeyID != "" && storedKeyID != e.keyID {
 		return nil, &ErrKeyMismatch{
@@ -109,25 +123,35 @@ func (e *AESGCMEncryptor) Decrypt(ciphertext []byte, storedKeyID string) ([]byte
 	}
 	raw = raw[:n]
 
-	block, err := aes.NewCipher(e.derivedKey)
-	if err != nil {
-		return nil, fmt.Errorf("create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("create GCM: %w", err)
-	}
-
 	if len(raw) < nonceSizeGCM {
 		return nil, ErrDecryptionFailed
 	}
 
 	nonce, ciphertextRaw := raw[:nonceSizeGCM], raw[nonceSizeGCM:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertextRaw, e.aad)
-	if err != nil {
-		return nil, ErrDecryptionFailed
+
+	plaintext, err := e.openGCM(nonce, ciphertextRaw, e.aad)
+	if err == nil {
+		return plaintext, nil
 	}
 
-	return plaintext, nil
+	// Fall back to legacy AAD for blobs encrypted before the key-name binding fix.
+	// Return ErrLegacyAAD so the caller can re-encrypt transparently.
+	plaintext, legacyErr := e.openGCM(nonce, ciphertextRaw, e.legacyAAD)
+	if legacyErr == nil {
+		return plaintext, ErrLegacyAAD
+	}
+
+	return nil, ErrDecryptionFailed
+}
+
+func (e *AESGCMEncryptor) openGCM(nonce, ciphertextRaw, aad []byte) ([]byte, error) {
+	block, err := aes.NewCipher(e.derivedKey)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return gcm.Open(nil, nonce, ciphertextRaw, aad)
 }
