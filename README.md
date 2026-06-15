@@ -1,5 +1,9 @@
 # platform-configctl
 
+<!-- ffreis-badges:start -->
+[![CI](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/FelipeFuhr/ffreis-badges/main/badges/ffreis-platform-configctl/ci.json)](https://github.com/FelipeFuhr/ffreis-platform-configctl/actions) [![License](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/FelipeFuhr/ffreis-badges/main/badges/ffreis-platform-configctl/license.json)](https://github.com/FelipeFuhr/ffreis-platform-configctl/blob/main/LICENSE)
+<!-- ffreis-badges:end -->
+
 Control plane CLI for all platform configuration state. Manages scoped configs
 and secrets backed by DynamoDB. Secrets are encrypted with AES-256-GCM.
 
