@@ -8,6 +8,12 @@ var ErrKeyUnavailable = errors.New("encryption key unavailable: set CONFIGCTL_SE
 // ErrDecryptionFailed is returned when decryption fails (wrong key, corrupted data).
 var ErrDecryptionFailed = errors.New("decryption failed: wrong key or corrupted ciphertext")
 
+// ErrLegacyAAD is returned by Decrypt when a ciphertext was authenticated with
+// the pre-v2 AAD (project+env only, no key name). The plaintext is still
+// returned. Callers should re-encrypt the value on the next write to migrate it
+// to the current AAD format that prevents cross-slot transplant attacks.
+var ErrLegacyAAD = errors.New("ciphertext uses legacy AAD (no key binding): re-encrypt to upgrade")
+
 // ErrKeyMismatch is returned when the stored key_id does not match the
 // currently derived key. The secret was encrypted with a different key.
 type ErrKeyMismatch struct {
