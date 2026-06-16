@@ -10,11 +10,12 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.39
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.57.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
-	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.50.0
 )
+
+require github.com/charmbracelet/lipgloss v1.1.0 // indirect
 
 require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.16 // indirect
@@ -35,6 +36,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
+	github.com/ffreis/platform-cli v0.1.0
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -46,3 +48,5 @@ require (
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 )
+
+replace github.com/ffreis/platform-cli => github.com/FelipeFuhr/ffreis-platform-cli v0.1.0
