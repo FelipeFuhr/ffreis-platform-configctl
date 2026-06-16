@@ -20,7 +20,7 @@ import (
 	"github.com/ffreis/platform-configctl/internal/appconfig"
 	"github.com/ffreis/platform-configctl/internal/logger"
 	"github.com/ffreis/platform-configctl/internal/store"
-	platformui "github.com/ffreis/platform-cli/pkg/ui"
+	platformui "github.com/FelipeFuhr/ffreis-platform-cli/pkg/ui"
 )
 
 var (
