@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	platformui "github.com/ffreis/platform-cli/pkg/ui"
+	platformui "github.com/FelipeFuhr/ffreis-platform-cli/pkg/ui"
 )
 
 type commandOutput struct {
