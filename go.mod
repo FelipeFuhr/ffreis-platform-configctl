@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
-	golang.org/x/crypto v0.50.0
+	golang.org/x/crypto v0.52.0
 )
 
 require github.com/charmbracelet/lipgloss v1.1.0 // indirect
@@ -46,5 +46,5 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 )
