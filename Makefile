@@ -18,7 +18,8 @@ MUTATION_THRESHOLD ?= 60
 LEFTHOOK_DIR     ?= $(CURDIR)/.bin
 LEFTHOOK_BIN     ?= $(LEFTHOOK_DIR)/lefthook
 
-.PHONY: all build install test test-short vet lint tidy clean check fmt fmt-check sec ci \
+.PHONY: all build install test test-short test-integration ddb-local-up ddb-local-down \
+        vet lint tidy clean check fmt fmt-check sec ci \
         validate plan mutation-test fuzz fuzz-extended help \
         container-build container-test container-run container-push \
         secrets-scan-staged lefthook-bootstrap lefthook-install lefthook-run lefthook
@@ -43,6 +44,47 @@ test:
 ## test-short: run unit tests (no live AWS)
 test-short:
 	go test ./... -short -v -count=1
+
+# Integration tests run against a real DynamoDB (DynamoDB Local in a container),
+# not a fake. They are build-tagged `integration` so they never run in the
+# default `make test`, and they SKIP themselves when no endpoint is reachable —
+# so a machine without a container runtime still gets a green `go test ./...`.
+DDB_LOCAL_IMAGE     ?= docker.io/amazon/dynamodb-local:2.5.2
+DDB_LOCAL_CONTAINER ?= configctl-ddb-test
+DDB_LOCAL_PORT      ?= 8000
+CONTAINER_ENGINE    ?= podman
+
+## ddb-local-up: start DynamoDB Local for integration tests (idempotent)
+ddb-local-up:
+	@$(CONTAINER_ENGINE) rm -f $(DDB_LOCAL_CONTAINER) >/dev/null 2>&1 || true
+	@$(CONTAINER_ENGINE) run -d --name $(DDB_LOCAL_CONTAINER) \
+		-p $(DDB_LOCAL_PORT):8000 $(DDB_LOCAL_IMAGE) >/dev/null
+	@printf 'waiting for DynamoDB Local'
+	@for i in $$(seq 1 30); do \
+		if curl -s -o /dev/null http://localhost:$(DDB_LOCAL_PORT) 2>/dev/null; then \
+			echo " ready"; exit 0; \
+		fi; \
+		printf '.'; sleep 1; \
+	done; \
+	echo " TIMEOUT" >&2; exit 1
+
+## ddb-local-down: stop and remove the DynamoDB Local container
+ddb-local-down:
+	@$(CONTAINER_ENGINE) rm -f $(DDB_LOCAL_CONTAINER) >/dev/null 2>&1 || true
+
+## test-integration: run integration tests against DynamoDB Local (starts/stops it)
+test-integration:
+	@if ! command -v $(CONTAINER_ENGINE) >/dev/null 2>&1; then \
+		echo "⚠ $(CONTAINER_ENGINE) not found — integration tests SKIPPED."; \
+		echo "  This is NOT a pass. Install $(CONTAINER_ENGINE), or point"; \
+		echo "  DYNAMODB_ENDPOINT at a running DynamoDB and use: go test -tags=integration ./..."; \
+		exit 0; \
+	fi
+	@$(MAKE) ddb-local-up
+	@go test -tags=integration ./... -run 'TestIntegration' -v -count=1; \
+		status=$$?; \
+		$(MAKE) ddb-local-down; \
+		exit $$status
 
 ## vet: run go vet
 vet:
