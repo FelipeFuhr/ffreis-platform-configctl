@@ -21,6 +21,7 @@ func (noopLogger) With(...zap.Field) logger.Logger {
 
 type fakeStore struct {
 	getFn  func(ctx context.Context, project, env string, itemType store.ItemType, key string) (*store.Item, error)
+	setFn  func(ctx context.Context, item *store.Item) error
 	listFn func(ctx context.Context, project, env string, itemType store.ItemType) ([]*store.Item, error)
 }
 
@@ -30,7 +31,12 @@ func (f fakeStore) Get(ctx context.Context, project, env string, itemType store.
 	}
 	return f.getFn(ctx, project, env, itemType, key)
 }
-func (f fakeStore) Set(context.Context, *store.Item) error { panic("unexpected store.Set call") }
+func (f fakeStore) Set(ctx context.Context, item *store.Item) error {
+	if f.setFn == nil {
+		panic("unexpected store.Set call")
+	}
+	return f.setFn(ctx, item)
+}
 func (f fakeStore) List(ctx context.Context, project, env string, itemType store.ItemType) ([]*store.Item, error) {
 	if f.listFn == nil {
 		panic("unexpected store.List call")
