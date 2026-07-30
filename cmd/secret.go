@@ -12,6 +12,7 @@ func newSecretCmd(d *deps, gf *globalFlags) *cobra.Command {
 		newSecretSetCmd(d, gf),
 		newSecretListCmd(d, gf),
 		newSecretDeleteCmd(d, gf),
+		newSecretRotateCmd(d, gf),
 	)
 	return cmd
 }

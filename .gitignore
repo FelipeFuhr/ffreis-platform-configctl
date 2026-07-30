@@ -56,6 +56,19 @@ secrets.*
 *secret*
 *credentials*
 
+# ...but Go SOURCE is code, not credentials. `*secret*` above is a filename
+# glob, so without these negations every new cmd/secret_*.go is silently
+# ignored: `git status` shows nothing, `git add` is a no-op, and the file is
+# lost on the next clean checkout. The existing secret_get.go/secret_set.go
+# etc. survive only because they were tracked BEFORE that rule landed —
+# gitignore never applies to already-tracked files, so the trap is invisible
+# until someone adds a NEW one. It cost a full implementation of
+# `secret rotate` (1024 lines written, committed as an empty branch).
+# Secret CONTENT stays gated by gitleaks (`make secrets-scan`, lefthook
+# pre-commit), which is the correct control for this — a filename glob never was.
+!*secret*.go
+!*credentials*.go
+
 # Backup exports (may contain secrets)
 *.backup.json
 exports/

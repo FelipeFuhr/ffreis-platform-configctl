@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	platformui "github.com/FelipeFuhr/ffreis-platform-cli/pkg/ui"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -20,7 +21,6 @@ import (
 	"github.com/ffreis/platform-configctl/internal/appconfig"
 	"github.com/ffreis/platform-configctl/internal/logger"
 	"github.com/ffreis/platform-configctl/internal/store"
-	platformui "github.com/FelipeFuhr/ffreis-platform-cli/pkg/ui"
 )
 
 var (
