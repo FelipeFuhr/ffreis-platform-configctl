@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.25.8"
+  GO_VERSION: "1.25"
   GOLANGCI_LINT_VERSION: "v1.57.2"
   IMAGE: ${{ github.event.repository.name }}
 
@@ -47,7 +47,7 @@ jobs:
       contents: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
     with:
-      go-version: "1.25.8"
+      go-version: "1.25"
       working-directory: "."
 
   # ── 3. Vet + Lint ──────────────────────────────────────────────────────────
@@ -78,10 +78,16 @@ jobs:
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
+        # scan-fix(ci:goinstall-v2-module-path): dropped install-mode: goinstall.
+        # golangci-lint v2 moved its cmd package under a /v2/ module path segment;
+        # `go install .../cmd/golangci-lint@v2.12.1` (what goinstall mode runs)
+        # doesn't include that segment and fails with "invalid version: unknown
+        # revision cmd/golangci-lint/v2.12.1". This job never actually ran before
+        # (gated behind draft==false), so the break was latent until promotion.
+        # Default binary-download mode sidesteps the module path entirely.
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
           version: v2.12.1
-          install-mode: goinstall
           args: --path-prefix=. --timeout=5m
 
   # ── 4. Test + Coverage + Vulnerability scan ────────────────────────────────
@@ -93,7 +99,7 @@ jobs:
     needs: [fmt]
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
     with:
-      go-version: "1.25.8"
+      go-version: "1.25"
       working-directory: "."
       test-timeout: "120s"
       run-govulncheck: true

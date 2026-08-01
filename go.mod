@@ -18,8 +18,8 @@ require (
 require github.com/charmbracelet/lipgloss v1.1.0 // indirect
 
 require (
-	github.com/FelipeFuhr/ffreis-platform-cli v0.2.0
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.16 // indirect
+	github.com/FelipeFuhr/ffreis-platform-cli v0.3.2
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.16
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.23 // indirect

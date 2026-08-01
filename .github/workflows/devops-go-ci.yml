@@ -26,7 +26,7 @@ jobs:
       contents: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mod-tidy-check.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
     with:
-      go-version: "1.25.8"
+      go-version: "1.25"
       working-directory: "."
 
   fmt:
@@ -34,7 +34,7 @@ jobs:
       contents: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
     with:
-      go-version: "1.25.8"
+      go-version: "1.25"
       working-directory: "."
 
   lint:
@@ -57,17 +57,18 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: "1.25.8"
+          go-version: "1.25"
           cache: true
 
       - name: go vet
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
+        # scan-fix(ci:goinstall-v2-module-path): dropped install-mode: goinstall —
+        # see the identical fix + full explanation in ci.yml's golangci-lint step.
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
           version: v2.12.1
-          install-mode: goinstall
           args: --path-prefix=. --timeout=5m
 
   test:
@@ -77,5 +78,5 @@ jobs:
     needs: [fmt]
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
     with:
-      go-version: "1.25.8"
+      go-version: "1.25"
       working-directory: "."
