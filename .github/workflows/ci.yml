@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.25.8"
+  GO_VERSION: "1.25"
   GOLANGCI_LINT_VERSION: "v1.57.2"
   IMAGE: ${{ github.event.repository.name }}
 
@@ -47,7 +47,7 @@ jobs:
       contents: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
     with:
-      go-version: "1.25.8"
+      go-version: "1.25"
       working-directory: "."
 
   # ── 3. Vet + Lint ──────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ jobs:
     needs: [fmt]
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
     with:
-      go-version: "1.25.8"
+      go-version: "1.25"
       working-directory: "."
       test-timeout: "120s"
       run-govulncheck: true
