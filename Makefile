@@ -141,8 +141,14 @@ secrets-scan-staged:
 	@command -v $(GITLEAKS) >/dev/null 2>&1 || (echo "Missing tool: $(GITLEAKS). Install: https://github.com/gitleaks/gitleaks#installing" && exit 1)
 	$(GITLEAKS) protect --staged --redact
 
-## 
-PLATFORM_STANDARDS_SHA := 3c787edb4e96ddea2e86b2add2c32139685e8db7  # v1.2.1
+## ffreis-platform-standards pin: v1.2.1
+# scan-fix(makefile:trailing-whitespace): moved the version comment off the
+# assignment line. GNU Make's `:=` strips only the `#`-comment text, not the
+# two spaces that preceded it — those spaces stayed IN the variable's value
+# and corrupted the interpolated curl URL below with
+# "curl: (3) URL rejected: Malformed input to a URL function", failing
+# `make hook-scripts`/`lefthook-bootstrap` on every fresh clone or CI run.
+PLATFORM_STANDARDS_SHA := 3c787edb4e96ddea2e86b2add2c32139685e8db7
 PLATFORM_STANDARDS_RAW := https://raw.githubusercontent.com/FelipeFuhr/ffreis-platform-standards
 
 HOOK_SCRIPTS := \
