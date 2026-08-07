@@ -17,7 +17,7 @@ jobs:
   mutation:
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mutation.yml@d9b0146bb491bf06a79c9c6289034537522cbed3
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mutation.yml@86fd6e3b73fbe6d4f83280ef2661605d441a20e3 # v1.4.0
     with:
       packages: "./internal/crypto/... ./internal/diff/... ./internal/validate/..."
       threshold: 60

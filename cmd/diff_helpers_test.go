@@ -109,3 +109,21 @@ func TestWriteDiffOutputJSON(t *testing.T) {
 		t.Fatalf("output[1] = %#v, unexpected", got[1])
 	}
 }
+
+// TestNewDiffCmdFlagWiring pins the command surface without invoking
+// Execute(): the RunE closure writes to the real os.Stdout, and runDiff
+// itself is already exercised end-to-end by diff_test.go — see
+// secret_rotate_wiring_test.go for the identical rationale.
+func TestNewDiffCmdFlagWiring(t *testing.T) {
+	t.Parallel()
+
+	cmd := newDiffCmd(&deps{}, &globalFlags{})
+	if cmd.Use != "diff" {
+		t.Fatalf("Use = %q, want diff", cmd.Use)
+	}
+	for _, name := range []string{"project", "env", "input"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("flag --%s is not registered", name)
+		}
+	}
+}

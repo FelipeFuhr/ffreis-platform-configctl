@@ -50,3 +50,21 @@ func TestWriteValidationErrorsJSON(t *testing.T) {
 		t.Fatalf("output[0] = %#v, unexpected", got[0])
 	}
 }
+
+// TestNewValidateCmdFlagWiring pins the command surface without invoking
+// Execute(): the RunE closure writes to the real os.Stdout/os.Stderr, and
+// runValidate itself is already exercised end-to-end by validate_test.go —
+// see secret_rotate_wiring_test.go for the identical rationale.
+func TestNewValidateCmdFlagWiring(t *testing.T) {
+	t.Parallel()
+
+	cmd := newValidateCmd(&deps{}, &globalFlags{})
+	if cmd.Use != "validate" {
+		t.Fatalf("Use = %q, want validate", cmd.Use)
+	}
+	for _, name := range []string{"project", "env"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("flag --%s is not registered", name)
+		}
+	}
+}
