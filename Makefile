@@ -19,7 +19,7 @@ COVERAGE_MIN     ?= 75
 LEFTHOOK_DIR     ?= $(CURDIR)/.bin
 LEFTHOOK_BIN     ?= $(LEFTHOOK_DIR)/lefthook
 
-.PHONY: all build install test test-short test-integration ddb-local-up ddb-local-down \
+.PHONY: all build build-all install test test-short test-integration ddb-local-up ddb-local-down \
         vet lint tidy clean check fmt fmt-check sec ci \
         validate plan mutation fuzz fuzz-extended help \
         coverage-gate integration-coverage-gate quality-gates \
@@ -34,6 +34,8 @@ all: build
 build:
 	@mkdir -p $(BUILD_DIR)
 	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) $(CMD_PKG)
+
+build-all: build ## Alias required by the lefthook release tier
 
 ## install: install the binary to GOPATH/bin
 install:
