@@ -2,7 +2,13 @@ module github.com/ffreis/platform-configctl
 
 go 1.25.8
 
-toolchain go1.25.12
+// scan-fix(govulncheck:GO-2026-6218,GO-2026-6090,GO-2026-6088,GO-2026-5972,GO-2026-5026):
+// go1.25.12's stdlib (net/url, crypto/tls, encoding/xml, encoding/asn1,
+// net/http via x/net/idna) carries 5 vulnerabilities this repo's call graph
+// reaches (DynamoStore.List, AESGCMEncryptor.Encrypt, cmd/output.go) — all
+// fixed in go1.25.13. `make sec` (govulncheck ./...) failed the lefthook CI
+// job on this pin; bumping the toolchain resolves it.
+toolchain go1.25.13
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.7
