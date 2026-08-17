@@ -7,7 +7,14 @@
 #   final    — minimal distroless image containing only the binary
 
 # ─── builder ────────────────────────────────────────────────────────────────
-FROM golang:1.25.8-alpine AS builder
+# scan-fix(trivy:CVE-2026-32280,CVE-2026-32281,CVE-2026-32283,CVE-2026-33811,
+# CVE-2026-33814,CVE-2026-33818,CVE-2026-39820,CVE-2026-39821,CVE-2026-39822,
+# CVE-2026-39836,CVE-2026-42499,CVE-2026-42504,CVE-2026-56853,CVE-2026-56858,
+# CVE-2026-56859,CVE-2026-56860,CVE-2026-56862): base image's Go 1.25.8
+# stdlib carried the same vulnerabilities govulncheck flagged against
+# go.mod's toolchain pin (fixed in 1.25.13) — pin the builder image directly
+# instead of relying on GOTOOLCHAIN=auto's silent in-build download.
+FROM golang:1.25.13-alpine AS builder
 
 WORKDIR /src
 
