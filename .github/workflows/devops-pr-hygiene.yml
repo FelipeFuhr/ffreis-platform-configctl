@@ -14,7 +14,7 @@ jobs:
   semantic-pr:
     if: github.event_name == 'pull_request'
     permissions:
-      pull-requests: read
+      contents: read
     uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-semantic-pr.yml@5dfbb4986ceb88f6518fa719da3a255294cf03cf
 
   actionlint:
