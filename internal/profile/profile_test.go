@@ -74,12 +74,36 @@ func TestLoad_InvalidYAMLIsError(t *testing.T) {
 func TestDefaultPath_UnderConfigDir(t *testing.T) {
 	t.Setenv("HOME", "/home/tester")
 
-	got, err := DefaultPath()
+	got, err := DefaultPath("configctl")
 	if err != nil {
 		t.Fatalf("DefaultPath() error = %v", err)
 	}
 	want := "/home/tester/.config/configctl/profiles.yaml"
 	if got != want {
 		t.Fatalf("DefaultPath() = %q, want %q", got, want)
+	}
+}
+
+// TestDefaultPath_GeneralizedPerApp proves the path is per-app, not
+// hardcoded to configctl: vaultctl gets its own profiles file, under its own
+// name, from the exact same loading code.
+func TestDefaultPath_GeneralizedPerApp(t *testing.T) {
+	t.Setenv("HOME", "/home/tester")
+
+	got, err := DefaultPath("vaultctl")
+	if err != nil {
+		t.Fatalf("DefaultPath() error = %v", err)
+	}
+	want := "/home/tester/.config/vaultctl/profiles.yaml"
+	if got != want {
+		t.Fatalf("DefaultPath() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultPath_EmptyAppNameIsError(t *testing.T) {
+	t.Parallel()
+
+	if _, err := DefaultPath(""); err == nil {
+		t.Fatal("DefaultPath(\"\") error = nil, want error")
 	}
 }

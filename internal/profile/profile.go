@@ -5,6 +5,7 @@
 package profile
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,14 +24,24 @@ type Profile struct {
 	Region  string `yaml:"region"`
 }
 
-// DefaultPath returns the default profiles file location,
-// ~/.config/configctl/profiles.yaml, honouring the current $HOME.
-func DefaultPath() (string, error) {
+// DefaultPath returns the default profiles file location for the named app,
+// ~/.config/<appName>/profiles.yaml, honouring the current $HOME.
+//
+// Generalised (rather than hardcoding "configctl") because this package is
+// shared by two independent binaries — platform-configctl and vaultctl —
+// each with its own profiles file, on purpose: profile state is per-tool,
+// never shared, even though the loading code is. Callers pass their own
+// binary name; see platform-configctl's DefaultPath("configctl") and
+// vaultctl's DefaultPath("vaultctl").
+func DefaultPath(appName string) (string, error) {
+	if appName == "" {
+		return "", errors.New("appName is required")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "configctl", "profiles.yaml"), nil
+	return filepath.Join(home, ".config", appName, "profiles.yaml"), nil
 }
 
 // Load reads and parses the profiles file at path, returning a map of

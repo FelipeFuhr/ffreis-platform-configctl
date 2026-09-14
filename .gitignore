@@ -41,6 +41,8 @@ terraform.rc
 # Build output
 /bin/platform-configctl
 /platform-configctl
+/bin/vaultctl
+/vaultctl
 dist/
 
 # Go build cache

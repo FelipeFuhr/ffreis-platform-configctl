@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ffreis/platform-configctl/internal/crypto"
+	"github.com/ffreis/platform-configctl/internal/guard"
 	"github.com/ffreis/platform-configctl/internal/logger"
 	"github.com/ffreis/platform-configctl/internal/store"
 )
@@ -88,8 +89,12 @@ func readSecretValueFromStdin(stdin io.Reader) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read secret from stdin: %w", err)
 	}
-	if len(plaintext) == 0 {
-		return nil, fmt.Errorf("secret value must not be empty")
+	// Refuses an empty/whitespace-only value or a bare "-": both are writes
+	// that would otherwise "succeed" while storing garbage, undetected,
+	// because a presence check alone passes on an empty or placeholder
+	// string. See internal/guard for the incidents that motivated this.
+	if err := guard.ValidateSecretValue(plaintext); err != nil {
+		return nil, err
 	}
 	return plaintext, nil
 }

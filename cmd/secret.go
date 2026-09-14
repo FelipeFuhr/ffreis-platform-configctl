@@ -13,8 +13,6 @@ func newSecretCmd(d *deps, gf *globalFlags) *cobra.Command {
 		newSecretListCmd(d, gf),
 		newSecretDeleteCmd(d, gf),
 		newSecretRotateCmd(d, gf),
-		newSecretExecCmd(d, gf),
-		newSecretExportEnvCmd(d, gf),
 	)
 	return cmd
 }

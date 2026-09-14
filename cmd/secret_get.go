@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ffreis/platform-configctl/internal/crypto"
+	"github.com/ffreis/platform-configctl/internal/guard"
 	"github.com/ffreis/platform-configctl/internal/store"
 )
 
@@ -125,15 +124,12 @@ func decryptSecretItem(d *deps, project, env string, item *store.Item) ([]byte, 
 	return plaintext, nil
 }
 
-// secretFingerprint returns a short, one-way identifier for plaintext:
-// the first 8 bytes of sha256(plaintext), hex-encoded (16 hex characters).
-// It is intentionally one-way and truncated — safe to print, log, or paste
-// into a ticket, since it never reveals the value and is not intended to be
-// collision-resistant against a targeted search of the full keyspace, only
-// to let an operator confirm two secrets are (or are not) the same value.
+// secretFingerprint returns a short, one-way identifier for plaintext. Thin
+// wrapper over internal/guard so vaultctl's `get` reuses the exact same
+// fingerprint logic rather than reimplementing it — see guard.Fingerprint
+// for the full doc.
 func secretFingerprint(plaintext []byte) string {
-	sum := sha256.Sum256(plaintext)
-	return hex.EncodeToString(sum[:8])
+	return guard.Fingerprint(plaintext)
 }
 
 func writeSecretGetOutput(w io.Writer, outputFormat string, item *store.Item, displayValue, fingerprint string) error {

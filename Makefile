@@ -1,7 +1,9 @@
 BINARY           := platform-configctl
+VAULT_BINARY     := vaultctl
 MODULE           := github.com/ffreis/platform-configctl
 BUILD_DIR        := bin
 CMD_PKG          := ./cmd/$(BINARY)
+VAULT_CMD_PKG    := ./cmd/$(VAULT_BINARY)
 GOFLAGS          := -trimpath
 LDFLAGS          := -w -s
 
@@ -13,13 +15,15 @@ IMAGE_TAG        ?= dev
 GITLEAKS         ?= gitleaks
 LEFTHOOK_VERSION ?= 1.7.10
 
-MUTATION_PACKAGES ?= ./internal/crypto/... ./internal/diff/... ./internal/validate/...
+MUTATION_PACKAGES ?= ./internal/crypto/... ./internal/diff/... ./internal/validate/... \
+	./internal/guard/... ./internal/vaulttier/... ./internal/profile/...
 MUTATION_THRESHOLD ?= 60
 COVERAGE_MIN     ?= 75
 LEFTHOOK_DIR     ?= $(CURDIR)/.bin
 LEFTHOOK_BIN     ?= $(LEFTHOOK_DIR)/lefthook
 
-.PHONY: all build build-all install test test-short test-integration ddb-local-up ddb-local-down \
+.PHONY: all build build-vaultctl build-all install install-vaultctl test test-short \
+        test-integration test-e2e ddb-local-up ddb-local-down \
         vet lint tidy clean check fmt fmt-check sec ci \
         validate plan mutation fuzz fuzz-extended help \
         coverage-gate integration-coverage-gate quality-gates \
@@ -35,11 +39,20 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) $(CMD_PKG)
 
-build-all: build ## Alias required by the lefthook release tier
+## build-vaultctl: compile the vaultctl binary into bin/
+build-vaultctl:
+	@mkdir -p $(BUILD_DIR)
+	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(VAULT_BINARY) $(VAULT_CMD_PKG)
+
+build-all: build build-vaultctl ## Alias required by the lefthook release tier — both binaries
 
 ## install: install the binary to GOPATH/bin
 install:
 	go install $(GOFLAGS) -ldflags "$(LDFLAGS)" ./cmd/$(BINARY)
+
+## install-vaultctl: install the vaultctl binary to GOPATH/bin
+install-vaultctl:
+	go install $(GOFLAGS) -ldflags "$(LDFLAGS)" ./cmd/$(VAULT_BINARY)
 
 ## test: run all tests with race detector
 test:
@@ -86,6 +99,20 @@ test-integration:
 	fi
 	@$(MAKE) ddb-local-up
 	@go test -tags=integration ./... -run 'TestIntegration' -v -count=1; \
+		status=$$?; \
+		$(MAKE) ddb-local-down; \
+		exit $$status
+
+## test-e2e: build the real vaultctl binary and exec it as a subprocess against DynamoDB Local (starts/stops it)
+test-e2e:
+	@if ! command -v $(CONTAINER_ENGINE) >/dev/null 2>&1; then \
+		echo "⚠ $(CONTAINER_ENGINE) not found — e2e tests SKIPPED."; \
+		echo "  This is NOT a pass. Install $(CONTAINER_ENGINE), or point"; \
+		echo "  DYNAMODB_ENDPOINT at a running DynamoDB and use: go test -tags=e2e ./cmd/vaultctl/..."; \
+		exit 0; \
+	fi
+	@$(MAKE) ddb-local-up
+	@go test -tags=e2e ./cmd/vaultctl/... -run 'TestE2E' -v -count=1; \
 		status=$$?; \
 		$(MAKE) ddb-local-down; \
 		exit $$status
@@ -243,10 +270,24 @@ container-shell:
 	  --entrypoint /bin/sh \
 	  $(IMAGE_NAME):test
 
-## mutation: run mutation testing with gremlins (slow — intended for CI/weekly)
-mutation: ## Run mutation testing with gremlins (slow — CI only)
+## mutation: run mutation testing with gremlins, one package at a time (slow — CI only)
+#
+# gremlins' `unleash [path]` takes exactly ONE plain directory path (not a
+# go-list `...` pattern, and not space-separated like `go test`'s package
+# args) — passing MUTATION_PACKAGES straight through as positional args used
+# to fail with "accepts at most 1 arg(s)" the moment a second package was
+# added to the (originally single-package) default. Loop over each entry
+# instead, stripping the trailing "/..." each one carries for `go test`
+# compatibility, and propagate the worst exit code across the run.
+mutation:
 	@which gremlins >/dev/null 2>&1 || go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
-	gremlins unleash --threshold-efficacy $(MUTATION_THRESHOLD) $(MUTATION_PACKAGES)
+	@status=0; \
+	for pkg in $(MUTATION_PACKAGES); do \
+		path=$${pkg%/...}; \
+		echo "==> gremlins unleash $$path"; \
+		gremlins unleash --threshold-efficacy $(MUTATION_THRESHOLD) "$$path" || status=1; \
+	done; \
+	exit $$status
 
 FUZZ_PACKAGES  ?= ./internal/crypto/... ./internal/validate/...
 FUZZ_TIME      ?= 30s

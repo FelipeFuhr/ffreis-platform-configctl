@@ -219,7 +219,7 @@ func resolveProfile(name string) (*profile.Profile, error) {
 	if name == "" {
 		return nil, nil
 	}
-	path, err := profile.DefaultPath()
+	path, err := profile.DefaultPath("configctl")
 	if err != nil {
 		return nil, err
 	}

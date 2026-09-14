@@ -2,11 +2,10 @@ package cmd
 
 import (
 	"errors"
-	"os"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/ffreis/platform-configctl/internal/guard"
 )
 
 // requireProjectEnv returns an error if project or env is empty.
@@ -54,19 +53,9 @@ func applyProfileProjectEnv(d *deps, project, env *string) {
 
 // isEnvTruthy reports whether the named environment variable is set to a
 // recognisably "on" value (1, t, true, yes, y, on — case-insensitive).
-// Anything else, including unset or empty, is false.
+// Anything else, including unset or empty, is false. Thin wrapper over
+// internal/guard so both platform-configctl and vaultctl parse their own
+// kill-switch env var identically without either importing the other.
 func isEnvTruthy(name string) bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
-	if v == "" {
-		return false
-	}
-	if b, err := strconv.ParseBool(v); err == nil {
-		return b
-	}
-	switch v {
-	case "yes", "y", "on":
-		return true
-	default:
-		return false
-	}
+	return guard.EnvTruthy(name)
 }

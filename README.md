@@ -111,18 +111,12 @@ platform-configctl secret list --project payments --env prod
 
 # Delete a secret
 platform-configctl secret delete stripe_key --project payments --env prod
-
-# Run a command with the decrypted value injected into its environment —
-# the value never touches configctl's own stdout/stderr or any log line
-platform-configctl secret exec stripe_key --as STRIPE_KEY \
-  --project payments --env prod -- ./deploy.sh
-
-# Write a shell-sourceable "export NAME=value" line to a file you name
-# (0600, no default path) instead of printing the value anywhere
-platform-configctl secret export-env stripe_key --as STRIPE_KEY \
-  --project payments --env prod --out /tmp/stripe_key.env
-source /tmp/stripe_key.env && shred -u /tmp/stripe_key.env
 ```
+
+Need to inject a decrypted value into a child process's environment, or write
+it to a file without ever printing it? That's `vaultctl exec`/`vaultctl
+export-env` — see [vaultctl](#vaultctl) below. They moved there because they
+are vault-specific leak-control primitives, not this binary's job.
 
 #### `CONFIGCTL_NO_REVEAL` kill switch
 
@@ -130,9 +124,9 @@ Set `CONFIGCTL_NO_REVEAL=1` (or `true`/`yes`/`on`) to make `secret get --reveal`
 refuse to decrypt/print the plaintext, regardless of the flag — a fleet-wide
 switch for environments where stdout is not a safe place for a secret to
 land, such as an AI agent session whose transcript is persisted. It only
-gates `--reveal`'s print path: plain `secret get` (fingerprint + metadata),
-`secret exec`, and `secret export-env` are unaffected, because none of them
-ever write the plaintext to a stream configctl controls.
+gates `--reveal`'s print path: plain `secret get` (fingerprint + metadata) is
+unaffected, since it never writes the plaintext to a stream configctl
+controls.
 
 ```bash
 export CONFIGCTL_NO_REVEAL=1
@@ -260,10 +254,65 @@ error — never a silent no-op.
 - **A secret value must never land in a stream that could be captured into an
   AI agent's session transcript.** `secret get` shows a one-way fingerprint
   (`sha256(plaintext)[0:8]`, hex) by default and only prints plaintext with
-  `--reveal`; `secret exec` and `secret export-env` let a value reach a child
-  process or a file you name without ever printing it. Set
-  `CONFIGCTL_NO_REVEAL=1` to disable `--reveal` entirely in an environment
-  where that risk is unacceptable (see [Environment Variables](#environment-variables)).
+  `--reveal`. Set `CONFIGCTL_NO_REVEAL=1` to disable `--reveal` entirely in an
+  environment where that risk is unacceptable (see [Environment
+  Variables](#environment-variables)). Need a value to reach a child process
+  or a file without ever printing it? See `vaultctl exec`/`vaultctl
+  export-env` under [vaultctl](#vaultctl).
+
+---
+
+## vaultctl
+
+`vaultctl` is a second, independent binary built from this same module — the
+fleet's credential-vault CLI. It reuses platform-configctl's storage,
+crypto, logging, and profile-loading code directly, but is a separate tool
+on purpose: those are vault-specific leak-control primitives, and bolting
+them onto a CLI literally named "config" blurs its identity. No `--table`,
+no `--project` — every command takes an explicit `<tier>` (`identity`,
+`repo`, or `root`) and a required `--env` (`dev` or `prod`, no default —
+an accidental prod write from an omitted default is exactly the failure
+class this vault exists to prevent), which together resolve the DynamoDB
+table internally.
+
+```bash
+export VAULTCTL_SECRET_KEY="passphrase"
+
+# Put a secret (stdin only, same discipline as platform-configctl's secret set)
+echo -n "ghp_..." | vaultctl put identity github-pat --env prod
+
+# Get it back — masked by default, fingerprint always shown
+vaultctl get identity github-pat --env prod
+vaultctl get identity github-pat --env prod --reveal
+
+# Inject the decrypted value into a child process's environment — it never
+# touches vaultctl's own stdout/stderr or any log line
+vaultctl exec identity github-pat --as GITHUB_TOKEN --env prod -- ./deploy.sh
+
+# Write a shell-sourceable "export NAME=value" line to a file you name
+vaultctl export-env identity github-pat --as GITHUB_TOKEN --env prod \
+  --out /tmp/github-pat.env
+source /tmp/github-pat.env && shred -u /tmp/github-pat.env
+
+vaultctl list identity --env prod
+vaultctl delete identity github-pat --env prod
+
+# Backup: this backs the vault's own recovery path — PITR on the root table
+# plus a backup export of root (ciphertext under the root key, safe to store
+# anywhere). Import takes no --tier/--env: the file self-describes its
+# origin table.
+vaultctl backup export --tier root --env prod --output root-prod.json --include-secrets
+vaultctl backup import --input root-prod.json --dry-run
+
+vaultctl whoami
+```
+
+`VAULTCTL_SECRET_KEY` and `VAULTCTL_NO_REVEAL` are vaultctl's own env
+vars — deliberately not `CONFIGCTL_SECRET_KEY`/`CONFIGCTL_NO_REVEAL`. The two
+binaries share internals but are independent tools; a shell with
+configctl's variables set must never silently satisfy vaultctl's too.
+`--profile` works the same way, from vaultctl's own
+`~/.config/vaultctl/profiles.yaml` (never `--env` — see above).
 
 ---
 
@@ -275,17 +324,23 @@ error — never a silent no-op.
 | `1` | Error (I/O, AWS, validation, etc.) |
 | `2` | Key not found (get on absent key) |
 
+Both binaries share this exit-code contract.
+
 ---
 
 ## Development
 
 ```bash
-make tidy          # go mod tidy + verify
-make build         # compile binary to bin/
-make test          # run all tests
-make test-short    # unit tests only (no AWS)
-make lint          # golangci-lint
-make check         # tidy + vet + test-short
+make tidy             # go mod tidy + verify
+make build            # compile platform-configctl to bin/
+make build-vaultctl   # compile vaultctl to bin/
+make build-all        # both
+make test             # run all tests
+make test-short       # unit tests only (no AWS)
+make test-integration # both binaries' command layers against DynamoDB Local
+make test-e2e         # builds the real vaultctl binary, execs it as a subprocess
+make lint             # golangci-lint
+make check            # tidy + vet + test-short
 ```
 
 ---
@@ -296,6 +351,7 @@ make check         # tidy + vet + test-short
 cmd/
   platform-configctl/main.go  Thin entry point
   ...                         Cobra CLI boundary — no business logic
+  vaultctl/                   vaultctl: its own main + full command tree, package main
 internal/
   appconfig/         Config resolution from env + flags
   store/             DynamoDB storage abstraction (Store interface)
@@ -304,5 +360,8 @@ internal/
   diff/              State comparison (live vs snapshot)
   validate/          Rule-based validation engine
   logger/            Structured zap logging with secret masking
-  profile/           Named --profile default resolution (~/.config/configctl/profiles.yaml)
+  profile/           Named --profile default resolution, per-app path (shared)
+  guard/             Leak-control primitives shared by both binaries: fingerprint,
+                      env-truthy kill-switch parsing, empty/"-" value guard
+  vaulttier/          vaultctl's tier validation, table resolution, tier-bound AAD
 ```

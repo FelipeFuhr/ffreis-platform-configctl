@@ -23,7 +23,6 @@ func TestNewSecretCmd_HasSubcommands(t *testing.T) {
 	}
 	want := map[string]bool{
 		"get": false, "set": false, "list": false, "delete": false, "rotate": false,
-		"exec": false, "export-env": false,
 	}
 	for _, c := range cmd.Commands() {
 		if _, ok := want[c.Name()]; ok {
