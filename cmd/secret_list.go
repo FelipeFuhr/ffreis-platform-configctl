@@ -61,6 +61,6 @@ func newSecretListCmd(d *deps, gf *globalFlags) *cobra.Command {
 		},
 	}
 
-	addProjectEnvFlags(cmd, &project, &env)
+	addProjectEnvFlags(cmd, d, &project, &env)
 	return cmd
 }

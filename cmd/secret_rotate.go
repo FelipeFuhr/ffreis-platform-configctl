@@ -120,7 +120,7 @@ Example:
 		},
 	}
 
-	addProjectEnvFlags(cmd, &project, &env)
+	addProjectEnvFlags(cmd, d, &project, &env)
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Verify and report without writing anything")
 	cmd.Flags().BoolVar(&continueOnError, "continue-on-error", false,
 		"Rotate the secrets that verify OK even if some fail (default: abort all on any verification failure)")

@@ -27,7 +27,7 @@ func newDiffCmd(d *deps, gf *globalFlags) *cobra.Command {
 		},
 	}
 
-	addProjectEnvFlags(cmd, &project, &env)
+	addProjectEnvFlags(cmd, d, &project, &env)
 	cmd.Flags().StringVar(&inputFile, "input", "", "Path to backup JSON file to compare against (required)")
 	return cmd
 }

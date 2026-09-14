@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,14 +22,26 @@ func newSecretGetCmd(d *deps, gf *globalFlags) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "get <key>",
-		Short: "Get a secret (metadata only unless --reveal is set)",
-		Args:  cobra.ExactArgs(1),
+		Short: "Get a secret (metadata + fingerprint only, unless --reveal is set)",
+		Long: `get prints secret metadata and a one-way fingerprint by default.
+
+The fingerprint is the first 8 bytes of sha256(plaintext), hex-encoded. It
+lets an operator confirm "is this the secret I think it is" by comparing
+digests across environments or against a known value, without the plaintext
+ever being displayed — the fingerprint is computed internally (the secret key
+is still required) but only the digest leaves this process.
+
+Pass --reveal to print the actual plaintext value. --reveal is refused
+outright when ` + envNoReveal + ` is set to a truthy value (1/true/yes/on) —
+a fleet-wide kill switch for the case where stdout is not a safe place for a
+secret to land, such as an AI agent session whose transcript is persisted.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSecretGet(cmd.Context(), d, gf.output, project, env, args[0], reveal, cmd.OutOrStdout())
 		},
 	}
 
-	addProjectEnvFlags(cmd, &project, &env)
+	addProjectEnvFlags(cmd, d, &project, &env)
 	cmd.Flags().BoolVar(&reveal, "reveal", false, "Decrypt and print the plaintext value")
 	return cmd
 }
@@ -46,18 +60,33 @@ func runSecretGet(
 	if err := d.cfg.RequireSecretKey(); err != nil {
 		return err
 	}
+	// Checked before any decrypt is attempted: the kill switch refuses the
+	// whole reveal path outright, not just the final print.
+	if reveal && isEnvTruthy(envNoReveal) {
+		return fmt.Errorf(
+			"--reveal refused: %s is set — this environment has disabled printing secret plaintext "+
+				"(use 'secret exec' or 'secret export-env' instead, or unset %s to override)",
+			envNoReveal, envNoReveal,
+		)
+	}
 
 	item, err := getSecretItem(ctx, d, project, env, key)
 	if err != nil {
 		return err
 	}
 
-	displayValue, err := secretDisplayValue(d, project, env, item, reveal)
+	plaintext, err := decryptSecretItem(d, project, env, item)
 	if err != nil {
 		return err
 	}
+	fingerprint := secretFingerprint(plaintext)
 
-	return writeSecretGetOutput(stdout, outputFormat, item, displayValue)
+	displayValue := "***"
+	if reveal {
+		displayValue = string(plaintext)
+	}
+
+	return writeSecretGetOutput(stdout, outputFormat, item, displayValue, fingerprint)
 }
 
 func getSecretItem(ctx context.Context, d *deps, project, env, key string) (*store.Item, error) {
@@ -72,14 +101,14 @@ func getSecretItem(ctx context.Context, d *deps, project, env, key string) (*sto
 	return nil, fmt.Errorf("get secret: %w", err)
 }
 
-func secretDisplayValue(d *deps, project, env string, item *store.Item, reveal bool) (string, error) {
-	if !reveal {
-		return "***", nil
-	}
-
+// decryptSecretItem decrypts item's ciphertext with the currently configured
+// secret key. This is always called by 'secret get' — even when --reveal is
+// not set — because the fingerprint (see secretFingerprint) is computed from
+// the plaintext and must be available regardless of --reveal.
+func decryptSecretItem(d *deps, project, env string, item *store.Item) ([]byte, error) {
 	enc, err := crypto.NewAESGCMEncryptor(d.cfg.SecretKey, project, env, item.Key)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	plaintext, err := enc.Decrypt([]byte(item.Value), item.KeyID)
 	if errors.Is(err, crypto.ErrLegacyAAD) {
@@ -88,32 +117,45 @@ func secretDisplayValue(d *deps, project, env string, item *store.Item, reveal b
 		// current AAD automatically.
 		d.log.Warn("legacy AAD detected: re-run 'secret set' to upgrade ciphertext",
 			zap.String("key", item.Key))
-		return string(plaintext), nil
+		return plaintext, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("decrypt secret: %w", err)
+		return nil, fmt.Errorf("decrypt secret: %w", err)
 	}
-	return string(plaintext), nil
+	return plaintext, nil
 }
 
-func writeSecretGetOutput(w io.Writer, outputFormat string, item *store.Item, displayValue string) error {
+// secretFingerprint returns a short, one-way identifier for plaintext:
+// the first 8 bytes of sha256(plaintext), hex-encoded (16 hex characters).
+// It is intentionally one-way and truncated — safe to print, log, or paste
+// into a ticket, since it never reveals the value and is not intended to be
+// collision-resistant against a targeted search of the full keyspace, only
+// to let an operator confirm two secrets are (or are not) the same value.
+func secretFingerprint(plaintext []byte) string {
+	sum := sha256.Sum256(plaintext)
+	return hex.EncodeToString(sum[:8])
+}
+
+func writeSecretGetOutput(w io.Writer, outputFormat string, item *store.Item, displayValue, fingerprint string) error {
 	if outputFormat == formatJSON {
 		out := map[string]interface{}{
-			"key":        item.Key,
-			keyValue:     displayValue,
-			"version":    item.Version,
-			"updated_at": item.UpdatedAt,
-			"updated_by": item.UpdatedBy,
-			"key_id":     item.KeyID,
+			"key":         item.Key,
+			keyValue:      displayValue,
+			"fingerprint": fingerprint,
+			"version":     item.Version,
+			"updated_at":  item.UpdatedAt,
+			"updated_by":  item.UpdatedBy,
+			"key_id":      item.KeyID,
 		}
 		return json.NewEncoder(w).Encode(out)
 	}
 
-	_, _ = fmt.Fprintf(w, "key:        %s\n", item.Key)
-	_, _ = fmt.Fprintf(w, "value:      %s\n", displayValue)
-	_, _ = fmt.Fprintf(w, "version:    %d\n", item.Version)
-	_, _ = fmt.Fprintf(w, "updated_at: %s\n", item.UpdatedAt.Format("2006-01-02T15:04:05Z"))
-	_, _ = fmt.Fprintf(w, "updated_by: %s\n", item.UpdatedBy)
-	_, _ = fmt.Fprintf(w, "key_id:     %s\n", item.KeyID)
+	_, _ = fmt.Fprintf(w, "%-13s%s\n", "key:", item.Key)
+	_, _ = fmt.Fprintf(w, "%-13s%s\n", "value:", displayValue)
+	_, _ = fmt.Fprintf(w, "%-13s%s\n", "fingerprint:", fingerprint)
+	_, _ = fmt.Fprintf(w, "%-13s%d\n", "version:", item.Version)
+	_, _ = fmt.Fprintf(w, "%-13s%s\n", "updated_at:", item.UpdatedAt.Format("2006-01-02T15:04:05Z"))
+	_, _ = fmt.Fprintf(w, "%-13s%s\n", "updated_by:", item.UpdatedBy)
+	_, _ = fmt.Fprintf(w, "%-13s%s\n", "key_id:", item.KeyID)
 	return nil
 }
