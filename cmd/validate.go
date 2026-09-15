@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/logger"
-	"github.com/ffreis/platform-configctl/internal/store"
-	"github.com/ffreis/platform-configctl/internal/validate"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/validate"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/logger"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 func newValidateCmd(d *deps, gf *globalFlags) *cobra.Command {

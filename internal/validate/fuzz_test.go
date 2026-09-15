@@ -3,7 +3,7 @@ package validate
 import (
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 // FuzzRegexRule exercises regex pattern compilation and value matching.

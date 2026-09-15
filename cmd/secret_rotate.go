@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/crypto"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/crypto"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 // rotateStatus is the outcome of processing a single secret during rotation.
@@ -182,7 +182,7 @@ func runSecretRotate(
 // probeKeyID derives the key_id fingerprint for a passphrase without binding
 // it to any particular secret's AAD. This is safe because key_id depends only
 // on the derived key (passphrase + project+env salt), never on the per-secret
-// key name used for AAD — see internal/crypto.NewAESGCMEncryptor.
+// key name used for AAD — see pkg/crypto.NewAESGCMEncryptor.
 func probeKeyID(passphrase, project, env string) (string, error) {
 	enc, err := crypto.NewAESGCMEncryptor(passphrase, project, env, "")
 	if err != nil {

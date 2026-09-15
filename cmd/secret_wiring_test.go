@@ -7,9 +7,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/crypto"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/crypto"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 const secretWiringKey = "01234567890123456789012345678901"

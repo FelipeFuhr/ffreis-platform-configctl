@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/crypto"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/crypto"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 const (
@@ -538,7 +538,7 @@ func TestRunSecretRotate_TextOutput(t *testing.T) {
 }
 
 // fakeEncryptor lets decryptTolerant be unit-tested against exact sentinel
-// errors without needing internal/crypto's package-private legacy-AAD test
+// errors without needing pkg/crypto's package-private legacy-AAD test
 // helper, which is not visible outside that package's own test binary.
 type fakeEncryptor struct {
 	decryptFn func(ciphertext []byte, keyID string) ([]byte, error)

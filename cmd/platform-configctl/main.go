@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/ffreis/platform-configctl/cmd"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/cmd"
 )
 
 func main() {

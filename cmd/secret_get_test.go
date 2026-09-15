@@ -5,9 +5,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/crypto"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/crypto"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 // secretGetKillSwitchDeps builds a deps wired to a fake store returning a

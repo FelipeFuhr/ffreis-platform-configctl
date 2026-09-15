@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/backup"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/backup"
 )
 
 func newBackupImportCmd(d *deps, gf *globalFlags) *cobra.Command {

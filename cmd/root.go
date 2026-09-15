@@ -18,10 +18,10 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/logger"
-	"github.com/ffreis/platform-configctl/internal/profile"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/logger"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/profile"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 var (

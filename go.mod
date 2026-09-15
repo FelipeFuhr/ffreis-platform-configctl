@@ -1,4 +1,4 @@
-module github.com/ffreis/platform-configctl
+module github.com/FelipeFuhr/ffreis-platform-configctl
 
 go 1.25.8
 

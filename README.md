@@ -26,7 +26,7 @@ and secrets backed by DynamoDB. Secrets are encrypted with AES-256-GCM.
 ```bash
 make install
 # or
-go install github.com/ffreis/platform-configctl@latest
+go install github.com/FelipeFuhr/ffreis-platform-configctl@latest
 ```
 
 ---
@@ -115,8 +115,10 @@ platform-configctl secret delete stripe_key --project payments --env prod
 
 Need to inject a decrypted value into a child process's environment, or write
 it to a file without ever printing it? That's `vaultctl exec`/`vaultctl
-export-env` — see [vaultctl](#vaultctl) below. They moved there because they
-are vault-specific leak-control primitives, not this binary's job.
+export-env`, in the fleet's separate credential-vault CLI (its own repo,
+`ffreis-platform-vaultctl`, which imports this module's `pkg/crypto`,
+`pkg/store`, `pkg/guard`, `pkg/profile` and `pkg/backup` packages directly).
+Those are vault-specific leak-control primitives, not this binary's job.
 
 #### `CONFIGCTL_NO_REVEAL` kill switch
 
@@ -258,61 +260,20 @@ error — never a silent no-op.
   environment where that risk is unacceptable (see [Environment
   Variables](#environment-variables)). Need a value to reach a child process
   or a file without ever printing it? See `vaultctl exec`/`vaultctl
-  export-env` under [vaultctl](#vaultctl).
+  export-env` in the fleet's separate credential-vault CLI, below.
 
 ---
 
 ## vaultctl
 
-`vaultctl` is a second, independent binary built from this same module — the
-fleet's credential-vault CLI. It reuses platform-configctl's storage,
-crypto, logging, and profile-loading code directly, but is a separate tool
-on purpose: those are vault-specific leak-control primitives, and bolting
-them onto a CLI literally named "config" blurs its identity. No `--table`,
-no `--project` — every command takes an explicit `<tier>` (`identity`,
-`repo`, or `root`) and a required `--env` (`dev` or `prod`, no default —
-an accidental prod write from an omitted default is exactly the failure
-class this vault exists to prevent), which together resolve the DynamoDB
-table internally.
-
-```bash
-export VAULTCTL_SECRET_KEY="passphrase"
-
-# Put a secret (stdin only, same discipline as platform-configctl's secret set)
-echo -n "ghp_..." | vaultctl put identity github-pat --env prod
-
-# Get it back — masked by default, fingerprint always shown
-vaultctl get identity github-pat --env prod
-vaultctl get identity github-pat --env prod --reveal
-
-# Inject the decrypted value into a child process's environment — it never
-# touches vaultctl's own stdout/stderr or any log line
-vaultctl exec identity github-pat --as GITHUB_TOKEN --env prod -- ./deploy.sh
-
-# Write a shell-sourceable "export NAME=value" line to a file you name
-vaultctl export-env identity github-pat --as GITHUB_TOKEN --env prod \
-  --out /tmp/github-pat.env
-source /tmp/github-pat.env && shred -u /tmp/github-pat.env
-
-vaultctl list identity --env prod
-vaultctl delete identity github-pat --env prod
-
-# Backup: this backs the vault's own recovery path — PITR on the root table
-# plus a backup export of root (ciphertext under the root key, safe to store
-# anywhere). Import takes no --tier/--env: the file self-describes its
-# origin table.
-vaultctl backup export --tier root --env prod --output root-prod.json --include-secrets
-vaultctl backup import --input root-prod.json --dry-run
-
-vaultctl whoami
-```
-
-`VAULTCTL_SECRET_KEY` and `VAULTCTL_NO_REVEAL` are vaultctl's own env
-vars — deliberately not `CONFIGCTL_SECRET_KEY`/`CONFIGCTL_NO_REVEAL`. The two
-binaries share internals but are independent tools; a shell with
-configctl's variables set must never silently satisfy vaultctl's too.
-`--profile` works the same way, from vaultctl's own
-`~/.config/vaultctl/profiles.yaml` (never `--env` — see above).
+`vaultctl` is the fleet's credential-vault CLI — a separate tool in its own
+repo (`ffreis-platform-vaultctl`), not built from this repo. It imports this
+module's `pkg/crypto`, `pkg/store`, `pkg/guard`, `pkg/profile`, `pkg/backup`,
+and `pkg/logger` packages directly (as a real Go module dependency) rather
+than duplicating them, but is a separate binary on purpose: vault-specific
+leak-control primitives don't belong bolted onto a CLI literally named
+"config". See that repo for `vaultctl`'s own usage, environment variables,
+and command surface.
 
 ---
 
@@ -324,7 +285,7 @@ configctl's variables set must never silently satisfy vaultctl's too.
 | `1` | Error (I/O, AWS, validation, etc.) |
 | `2` | Key not found (get on absent key) |
 
-Both binaries share this exit-code contract.
+`vaultctl`, in its own repo, shares this same exit-code contract.
 
 ---
 
@@ -333,12 +294,9 @@ Both binaries share this exit-code contract.
 ```bash
 make tidy             # go mod tidy + verify
 make build            # compile platform-configctl to bin/
-make build-vaultctl   # compile vaultctl to bin/
-make build-all        # both
 make test             # run all tests
 make test-short       # unit tests only (no AWS)
-make test-integration # both binaries' command layers against DynamoDB Local
-make test-e2e         # builds the real vaultctl binary, execs it as a subprocess
+make test-integration # command layer against DynamoDB Local
 make lint             # golangci-lint
 make check            # tidy + vet + test-short
 ```
@@ -351,17 +309,16 @@ make check            # tidy + vet + test-short
 cmd/
   platform-configctl/main.go  Thin entry point
   ...                         Cobra CLI boundary — no business logic
-  vaultctl/                   vaultctl: its own main + full command tree, package main
-internal/
-  appconfig/         Config resolution from env + flags
+pkg/                  ← promoted for external import (e.g. by vaultctl's own repo)
   store/             DynamoDB storage abstraction (Store interface)
   crypto/            AES-256-GCM encryption (Encryptor interface)
   backup/            Export/import format and checksum verification
-  diff/              State comparison (live vs snapshot)
-  validate/          Rule-based validation engine
   logger/            Structured zap logging with secret masking
   profile/           Named --profile default resolution, per-app path (shared)
-  guard/             Leak-control primitives shared by both binaries: fingerprint,
+  guard/             Leak-control primitives shared with vaultctl: fingerprint,
                       env-truthy kill-switch parsing, empty/"-" value guard
-  vaulttier/          vaultctl's tier validation, table resolution, tier-bound AAD
+internal/
+  appconfig/         Config resolution from env + flags
+  diff/              State comparison (live vs snapshot)
+  validate/          Rule-based validation engine
 ```

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 // ExportOptions controls what is included in an export.

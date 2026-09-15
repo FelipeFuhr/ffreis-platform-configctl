@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/crypto"
-	"github.com/ffreis/platform-configctl/internal/guard"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/crypto"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/guard"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 func newSecretGetCmd(d *deps, gf *globalFlags) *cobra.Command {
@@ -125,7 +125,7 @@ func decryptSecretItem(d *deps, project, env string, item *store.Item) ([]byte, 
 }
 
 // secretFingerprint returns a short, one-way identifier for plaintext. Thin
-// wrapper over internal/guard so vaultctl's `get` reuses the exact same
+// wrapper over pkg/guard so vaultctl's `get` reuses the exact same
 // fingerprint logic rather than reimplementing it — see guard.Fingerprint
 // for the full doc.
 func secretFingerprint(plaintext []byte) string {

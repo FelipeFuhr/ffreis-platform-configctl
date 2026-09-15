@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 // ImportOptions controls import behaviour.

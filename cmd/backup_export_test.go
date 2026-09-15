@@ -8,9 +8,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/backup"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/backup"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 func TestIsStdoutOutput(t *testing.T) {

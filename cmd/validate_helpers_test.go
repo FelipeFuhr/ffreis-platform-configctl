@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/validate"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/validate"
 )
 
 func TestWriteValidationErrorsText(t *testing.T) {

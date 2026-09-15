@@ -1,6 +1,6 @@
 package diff
 
-import "github.com/ffreis/platform-configctl/internal/store"
+import "github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 
 // ChangeKind describes the nature of a difference between live state and snapshot.
 type ChangeKind string
