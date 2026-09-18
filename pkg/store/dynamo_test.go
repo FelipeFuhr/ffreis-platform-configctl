@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,7 +24,19 @@ const testTable = "platform-config-test"
 // fakeDynamoClient is an in-memory DynamoClient implementing only what
 // DynamoStore needs. Tests can preload items via items, capture the last
 // inputs for assertion, and force errors via putErr / getErr / etc.
+//
+// PutItem ACTUALLY enforces the ConditionExpression it is given
+// (attribute_not_exists(PK) for new items, "#v = :expected" for updates),
+// rejecting a write whose condition doesn't hold with a
+// ConditionalCheckFailedException-shaped error — exactly like real
+// DynamoDB. This is what makes a genuine concurrent-write test meaningful:
+// a fake that unconditionally accepted every PutItem would let two racing
+// writers both "succeed" regardless of whether DynamoStore.Set's
+// optimistic-concurrency logic works at all, silently certifying a broken
+// implementation. All access is guarded by mu so PutItem is safe to call
+// from multiple goroutines at once.
 type fakeDynamoClient struct {
+	mu    sync.Mutex
 	items map[string]map[string]types.AttributeValue // PK#SK -> item
 
 	lastPut    *dynamodb.PutItemInput
@@ -53,7 +67,18 @@ func avString(item map[string]types.AttributeValue, key string) string {
 	return ""
 }
 
+func avNumber(item map[string]types.AttributeValue, key string) (string, bool) {
+	if v, ok := item[key]; ok {
+		if n, ok := v.(*types.AttributeValueMemberN); ok {
+			return n.Value, true
+		}
+	}
+	return "", false
+}
+
 func (f *fakeDynamoClient) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.lastGet = in
 	if f.getErr != nil {
 		return nil, f.getErr
@@ -67,18 +92,64 @@ func (f *fakeDynamoClient) GetItem(_ context.Context, in *dynamodb.GetItemInput,
 	return &dynamodb.GetItemOutput{Item: item}, nil
 }
 
+// errConditionalCheckFailed mimics the error shape DynamoStore's
+// isConditionFailed looks for (a string-contains check on
+// "ConditionalCheckFailedException" — see dynamo.go).
+var errConditionalCheckFailed = errors.New("ConditionalCheckFailedException: the conditional request failed")
+
+// evaluateCondition enforces the two ConditionExpression shapes DynamoStore
+// ever sends (see dynamo.go's Set): "attribute_not_exists(PK)" for a new
+// item, or "#v = :expected" for an update. Any other/missing expression is
+// treated as unconditional, matching real DynamoDB's PutItem behaviour.
+func (f *fakeDynamoClient) evaluateCondition(in *dynamodb.PutItemInput, pk, sk string) error {
+	if in.ConditionExpression == nil {
+		return nil
+	}
+	existing, exists := f.items[itemKey(pk, sk)]
+	switch *in.ConditionExpression {
+	case "attribute_not_exists(PK)":
+		if exists {
+			return errConditionalCheckFailed
+		}
+	case "#v = :expected":
+		expectedAV, ok := in.ExpressionAttributeValues[":expected"]
+		if !ok {
+			return fmt.Errorf("test fake: missing :expected in ExpressionAttributeValues")
+		}
+		expectedN, ok := expectedAV.(*types.AttributeValueMemberN)
+		if !ok {
+			return fmt.Errorf("test fake: :expected is not a number attribute")
+		}
+		if !exists {
+			return errConditionalCheckFailed
+		}
+		currentVersion, ok := avNumber(existing, "version")
+		if !ok || currentVersion != expectedN.Value {
+			return errConditionalCheckFailed
+		}
+	}
+	return nil
+}
+
 func (f *fakeDynamoClient) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.lastPut = in
 	if f.putErr != nil {
 		return nil, f.putErr
 	}
 	pk := avString(in.Item, "PK")
 	sk := avString(in.Item, "SK")
+	if err := f.evaluateCondition(in, pk, sk); err != nil {
+		return nil, err
+	}
 	f.items[itemKey(pk, sk)] = in.Item
 	return &dynamodb.PutItemOutput{}, nil
 }
 
 func (f *fakeDynamoClient) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.lastDelete = in
 	if f.deleteErr != nil {
 		return nil, f.deleteErr
@@ -90,6 +161,8 @@ func (f *fakeDynamoClient) DeleteItem(_ context.Context, in *dynamodb.DeleteItem
 }
 
 func (f *fakeDynamoClient) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.lastQuery = in
 	if f.queryErr != nil {
 		return nil, f.queryErr
@@ -116,6 +189,8 @@ func (f *fakeDynamoClient) Query(_ context.Context, in *dynamodb.QueryInput, _ .
 }
 
 func (f *fakeDynamoClient) Scan(_ context.Context, in *dynamodb.ScanInput, _ ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.lastScan = in
 	if f.scanErr != nil {
 		return nil, f.scanErr
@@ -131,6 +206,8 @@ func (f *fakeDynamoClient) Scan(_ context.Context, in *dynamodb.ScanInput, _ ...
 // shape DynamoStore would write. Mirrors recordFromItem in dynamo.go.
 func (f *fakeDynamoClient) preload(t *testing.T, item *store.Item) {
 	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	now := time.Now().UTC().Format(time.RFC3339)
 	h := sha256.Sum256([]byte(item.Value))
 	rec := map[string]any{
@@ -279,6 +356,13 @@ func TestSet_NewItemUsesAttributeNotExists(t *testing.T) {
 // the current expected version.
 func TestSet_ExistingItemUsesVersionMatch(t *testing.T) {
 	fake := newFake()
+	// The fake's PutItem enforces "#v = :expected" for real (see
+	// evaluateCondition above), just like DynamoDB does — so, unlike before
+	// that enforcement existed, an update against a key with no existing
+	// item at the expected version would now correctly be rejected. Preload
+	// the item at version 3 first so this test's actual write is the
+	// legitimate update it claims to be.
+	fake.preload(t, &store.Item{Project: "p", Env: "e", Key: "k", Value: "v0", Type: store.ItemTypeConfig, Version: 3})
 	s := store.NewDynamoStore(fake, testTable)
 
 	err := s.Set(context.Background(), &store.Item{
@@ -470,12 +554,56 @@ func TestListProjects_Deduplicates(t *testing.T) {
 	}
 }
 
+// TestListProjects_EmptyTable exercises ListProjects against a table with no
+// items at all. Unlike Get, List/ListProjects have no ErrNotFound in their
+// contract (store.go documents ErrNotFound only for Get) — an empty
+// collection is a normal, successful result: an empty, non-nil-error slice.
+// This specific case (zero items, zero projects) was previously untested;
+// every existing ListProjects test preloaded at least one project.
+func TestListProjects_EmptyTable(t *testing.T) {
+	fake := newFake()
+	s := store.NewDynamoStore(fake, testTable)
+
+	projects, err := s.ListProjects(context.Background())
+	if err != nil {
+		t.Fatalf("ListProjects on empty table: err = %v, want nil", err)
+	}
+	if len(projects) != 0 {
+		t.Fatalf("ListProjects on empty table = %v, want empty slice", projects)
+	}
+}
+
+// TestList_EmptyResult is List's equivalent of TestListProjects_EmptyTable:
+// an empty result set is success, not an error.
+func TestList_EmptyResult(t *testing.T) {
+	fake := newFake()
+	s := store.NewDynamoStore(fake, testTable)
+
+	items, err := s.List(context.Background(), "p", "e", store.ItemTypeConfig)
+	if err != nil {
+		t.Fatalf("List on empty table: err = %v, want nil", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("List on empty table = %v, want empty slice", items)
+	}
+}
+
 // TestSet_BumpsVersionOnWrite documents that the stored version is always one
 // higher than the in-memory item.Version, regardless of starting value. This
 // is what makes the version-match optimistic-concurrency scheme work.
 func TestSet_BumpsVersionOnWrite(t *testing.T) {
 	for _, startVersion := range []int64{0, 1, 5, 99} {
 		fake := newFake()
+		// version=0 means "new item" (attribute_not_exists(PK), nothing to
+		// preload). Any non-zero version is an update, and the fake's
+		// PutItem now really enforces "#v = :expected" against existing
+		// state — preload an item already sitting at exactly that version
+		// so the update is legitimate, matching what DynamoStore.Set
+		// actually promises its caller (pass the version you currently
+		// hold, get it bumped by one).
+		if startVersion != 0 {
+			fake.preload(t, &store.Item{Project: "p", Env: "e", Key: "k", Value: "v0", Type: store.ItemTypeConfig, Version: startVersion})
+		}
 		s := store.NewDynamoStore(fake, testTable)
 		err := s.Set(context.Background(), &store.Item{
 			Project: "p", Env: "e", Key: "k",
@@ -528,5 +656,87 @@ func TestSet_TableNameIsForwarded(t *testing.T) {
 	})
 	if fake.lastPut.TableName == nil || *fake.lastPut.TableName != "custom-table-xyz" {
 		t.Errorf("TableName = %v, want custom-table-xyz", aws.ToString(fake.lastPut.TableName))
+	}
+}
+
+// TestErrVersionConflict_Error pins the exact message ErrVersionConflict
+// produces — the CLI's "run `diff` to inspect" hint lives in this string,
+// so a wording regression would previously have gone undetected (nothing
+// called .Error() on this type; every other test only inspected the
+// struct fields).
+func TestErrVersionConflict_Error(t *testing.T) {
+	err := &store.ErrVersionConflict{Key: "api_key", ExpectedVersion: 5}
+	want := "version conflict on key api_key: run `diff` to inspect current state before retrying"
+	if got := err.Error(); got != want {
+		t.Fatalf("Error() = %q, want %q", got, want)
+	}
+}
+
+// TestSet_ConcurrentWrites_OnlyOneSucceeds is the genuine concurrent-write
+// test the version-conflict happy-path tests above cannot substitute for.
+// TestSet_VersionConflictReturnsTypedError only proves the CODE correctly
+// interprets an error message string handed to it by a mock — it never
+// actually races two writers against shared state, so it would pass
+// identically even if DynamoStore.Set built no ConditionExpression at all
+// (as long as *something* eventually produced that error text). This test
+// instead seeds one real item at version=1, then launches N goroutines that
+// all read that same starting point and race to Set with Version=1
+// (expecting to bump to 2). Because the fake DynamoClient above now
+// actually enforces "#v = :expected" against its current state under a
+// mutex — mirroring DynamoDB's real atomic conditional-write guarantee —
+// exactly one writer must observe success and every other writer must
+// observe *ErrVersionConflict, regardless of goroutine scheduling.
+func TestSet_ConcurrentWrites_OnlyOneSucceeds(t *testing.T) {
+	fake := newFake()
+	fake.preload(t, &store.Item{Project: "p", Env: "e", Key: "k", Value: "v0", Type: store.ItemTypeConfig, Version: 1})
+	s := store.NewDynamoStore(fake, testTable)
+
+	const writers = 8
+	var wg sync.WaitGroup
+	var succeeded, conflicted int32
+	var mu sync.Mutex
+	var otherErrs []error
+
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			err := s.Set(context.Background(), &store.Item{
+				Project: "p", Env: "e", Key: "k",
+				Value: "v-from-writer-" + strconv.Itoa(n), Type: store.ItemTypeConfig, Version: 1,
+			})
+			mu.Lock()
+			defer mu.Unlock()
+			var conflict *store.ErrVersionConflict
+			switch {
+			case err == nil:
+				succeeded++
+			case errors.As(err, &conflict):
+				conflicted++
+			default:
+				otherErrs = append(otherErrs, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if len(otherErrs) != 0 {
+		t.Fatalf("unexpected non-conflict errors from concurrent Set: %v", otherErrs)
+	}
+	if succeeded != 1 {
+		t.Fatalf("succeeded = %d, want exactly 1 (all %d writers raced from the same starting version)", succeeded, writers)
+	}
+	if conflicted != writers-1 {
+		t.Fatalf("conflicted = %d, want %d", conflicted, writers-1)
+	}
+
+	// The stored version must have advanced by exactly one bump (1 -> 2),
+	// never more — proof that only one of the racing writes actually landed.
+	got, err := s.Get(context.Background(), "p", "e", store.ItemTypeConfig, "k")
+	if err != nil {
+		t.Fatalf("Get after race: %v", err)
+	}
+	if got.Version != 2 {
+		t.Fatalf("final stored Version = %d, want 2 (exactly one successful bump from 1)", got.Version)
 	}
 }
