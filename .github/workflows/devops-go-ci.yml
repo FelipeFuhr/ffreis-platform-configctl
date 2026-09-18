@@ -98,8 +98,17 @@ jobs:
     permissions:
       contents: read
     needs: [fmt]
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-integration-coverage.yml@86fd6e3b73fbe6d4f83280ef2661605d441a20e3 # v1.4.0
+    # dynamodb-local starts a real DynamoDB Local container so secret
+    # rotate's real conditional-write/optimistic-locking test
+    # (cmd/secret_rotate_integration_test.go, via ddbEndpoint()) actually
+    # runs against a live endpoint instead of t.Skip()ing — see
+    # FelipeFuhr/ffreis-workflows-go#109. Needs Docker, hence the runner
+    # override (the self-hosted "local" default has no container runtime
+    # provisioned yet).
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-integration-coverage.yml@b11a79c4ddb22bf7acc90bee0021c1ee42f9ee55 # pre-release: ffreis-workflows-go#109 — re-pin to a tag once that PR merges & releases
     with:
+      runner: '["ubuntu-latest"]'
       go-version: "1.25"
       working-directory: "."
       coverage-threshold: 75
+      dynamodb-local: true
