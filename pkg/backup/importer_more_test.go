@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 // errStore always returns a generic (non-NotFound) error from Get, to exercise

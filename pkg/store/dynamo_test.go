@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 const testTable = "platform-config-test"

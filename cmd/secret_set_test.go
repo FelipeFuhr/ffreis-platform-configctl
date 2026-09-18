@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 // TestNewSecretSetCmdFlagWiring pins the command surface without touching
@@ -207,6 +207,43 @@ func TestReadSecretValueFromStdin_EmptyIsError(t *testing.T) {
 
 	if _, err := readSecretValueFromStdin(strings.NewReader("\n")); err == nil {
 		t.Fatal("readSecretValueFromStdin() error = nil, want error for effectively-empty input")
+	}
+}
+
+// TestRunSecretSet_RefusesEmptyValue is the named regression test for the
+// empty-string incident: a real secret was once found live in a production
+// table stored as SecretValue = "" — a write that succeeded and stored
+// garbage, undetected because presence checks pass on an empty string. This
+// proves `secret set` refuses that write outright rather than persisting it.
+// Fails if the guard.ValidateSecretValue call in readSecretValueFromStdin is
+// ever removed.
+func TestRunSecretSet_RefusesEmptyValue(t *testing.T) {
+	t.Parallel()
+
+	d := &deps{cfg: &appconfig.Config{SecretKey: secretWiringKey}, log: noopLogger{}, store: fakeStore{}}
+
+	for _, raw := range []string{"", "   ", "\t\n"} {
+		err := runSecretSet(context.Background(), d, "platform", "dev", "k", strings.NewReader(raw))
+		if err == nil {
+			t.Fatalf("runSecretSet(%q) error = nil, want error refusing an empty/whitespace-only value", raw)
+		}
+	}
+}
+
+// TestRunSecretSet_RefusesDashValue is the named regression test for the
+// "-" incident: some CLI tools' "read from stdin" convention interprets a
+// bare "-" argument as "read from stdin" and, used incorrectly, ends up
+// storing the literal string "-" as the secret itself — succeeding while
+// storing a placeholder byte instead of a real value. Fails if the
+// guard.ValidateSecretValue call in readSecretValueFromStdin is ever removed.
+func TestRunSecretSet_RefusesDashValue(t *testing.T) {
+	t.Parallel()
+
+	d := &deps{cfg: &appconfig.Config{SecretKey: secretWiringKey}, log: noopLogger{}, store: fakeStore{}}
+
+	err := runSecretSet(context.Background(), d, "platform", "dev", "k", strings.NewReader("-"))
+	if err == nil {
+		t.Fatal(`runSecretSet("-") error = nil, want error refusing the literal string "-"`)
 	}
 }
 

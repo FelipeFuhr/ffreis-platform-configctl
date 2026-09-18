@@ -18,9 +18,10 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/logger"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/logger"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/profile"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 var (
@@ -32,10 +33,11 @@ var (
 // deps holds all resolved runtime dependencies. It is populated by the root
 // command's PersistentPreRunE before any subcommand runs.
 type deps struct {
-	cfg   *appconfig.Config
-	log   logger.Logger
-	store store.Store
-	ui    *platformui.Presenter
+	cfg     *appconfig.Config
+	log     logger.Logger
+	store   store.Store
+	ui      *platformui.Presenter
+	profile *profile.Profile // resolved --profile defaults, nil unless --profile was set
 }
 
 // globalFlags holds the values bound to top-level persistent flags.
@@ -45,6 +47,7 @@ type globalFlags struct {
 	logLevel string
 	output   string
 	ui       string
+	profile  string
 }
 
 const (
@@ -118,6 +121,8 @@ Set CONFIGCTL_TABLE, AWS credentials, and CONFIGCTL_SECRET_KEY before use.`,
 	root.PersistentFlags().StringVar(&gf.logLevel, "log-level", "", "Log level: debug, info, warn, error (overrides CONFIGCTL_LOG_LEVEL)")
 	root.PersistentFlags().StringVar(&gf.output, "output", "text", "Output format: text, json, table")
 	root.PersistentFlags().StringVar(&gf.ui, "ui", "auto", "UI mode: auto, plain, rich")
+	root.PersistentFlags().StringVar(&gf.profile, "profile", "",
+		"Named profile from ~/.config/configctl/profiles.yaml supplying default --table/--project/--env/--region")
 
 	root.AddCommand(
 		newConfigCmd(d, gf),
@@ -134,16 +139,33 @@ Set CONFIGCTL_TABLE, AWS credentials, and CONFIGCTL_SECRET_KEY before use.`,
 
 // initDeps resolves all runtime dependencies. Called by PersistentPreRunE.
 func initDeps(ctx context.Context, gf *globalFlags, d *deps) error {
-	cfg, err := appconfig.Load()
+	prof, err := resolveProfile(gf.profile)
 	if err != nil {
-		// Allow --table flag to satisfy the requirement.
-		if gf.table == "" {
-			return err
+		return err
+	}
+	d.profile = prof
+
+	cfg, loadErr := appconfig.Load()
+	if loadErr != nil {
+		// Allow --table (directly, or via --profile) to satisfy the requirement.
+		if gf.table == "" && (prof == nil || prof.Table == "") {
+			return loadErr
 		}
 		cfg = appconfig.LoadOptional()
 	}
 
-	// CLI flags override env vars.
+	// A profile only fills in what the environment left empty; an explicit
+	// CLI flag (applied next) always wins over both.
+	if prof != nil {
+		if cfg.TableName == "" && prof.Table != "" {
+			cfg.TableName = prof.Table
+		}
+		if cfg.AWSRegion == "" && prof.Region != "" {
+			cfg.AWSRegion = prof.Region
+		}
+	}
+
+	// CLI flags override env vars and the profile.
 	if gf.table != "" {
 		cfg.TableName = gf.table
 	}
@@ -187,6 +209,21 @@ func initDeps(ctx context.Context, gf *globalFlags, d *deps) error {
 		zap.String("region", cfg.AWSRegion),
 	)
 	return nil
+}
+
+// resolveProfile loads and resolves the named profile, if any. An empty name
+// is a no-op (returns nil, nil) — most invocations do not use --profile.
+// Once a name is given, a missing profiles file or a name absent from it is
+// a clear error, never a silent no-op.
+func resolveProfile(name string) (*profile.Profile, error) {
+	if name == "" {
+		return nil, nil
+	}
+	path, err := profile.DefaultPath("configctl")
+	if err != nil {
+		return nil, err
+	}
+	return profile.Resolve(path, name)
 }
 
 // callerIdentity returns the IAM caller identity ARN for use as updated_by.

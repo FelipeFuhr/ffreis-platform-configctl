@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/ffreis/platform-configctl/internal/logger"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/logger"
 )
 
 // TestMaskedReturnsSentinel verifies that Masked always returns the "***"

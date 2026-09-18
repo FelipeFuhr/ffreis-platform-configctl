@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 func newConfigGetCmd(d *deps, gf *globalFlags) *cobra.Command {
@@ -43,6 +43,6 @@ func newConfigGetCmd(d *deps, gf *globalFlags) *cobra.Command {
 		},
 	}
 
-	addProjectEnvFlags(cmd, &project, &env)
+	addProjectEnvFlags(cmd, d, &project, &env)
 	return cmd
 }

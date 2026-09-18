@@ -43,6 +43,16 @@ type Metadata struct {
 	Environment    string `json:"environment"`
 	ItemCount      int    `json:"item_count"`
 	IncludesSecret bool   `json:"includes_secrets"`
+	// Tier is optional and only ever set by vaultctl. platform-configctl
+	// resolves its target table from a single global --table flag, so a
+	// configctl backup's import doesn't need this — the file carries no
+	// table selector and none is expected. vaultctl instead resolves a
+	// different physical DynamoDB table per <tier>/--env, and `vaultctl
+	// backup import` takes neither flag (matching platform-configctl's own
+	// `backup import`, which also takes no --project/--env): vaultctl
+	// self-describes which table an export came from here, so import can
+	// resolve the same table without asking the operator to repeat it.
+	Tier string `json:"tier,omitempty"`
 }
 
 // BackupItem is a single entry in the backup file.

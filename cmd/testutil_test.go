@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/logger"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/logger"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 type noopLogger struct{}

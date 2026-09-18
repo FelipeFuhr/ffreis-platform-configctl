@@ -7,9 +7,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/crypto"
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/crypto"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 const secretWiringKey = "01234567890123456789012345678901"
@@ -21,7 +21,9 @@ func TestNewSecretCmd_HasSubcommands(t *testing.T) {
 	if cmd.Use != "secret" {
 		t.Fatalf("Use = %q, want secret", cmd.Use)
 	}
-	want := map[string]bool{"get": false, "set": false, "list": false, "delete": false, "rotate": false}
+	want := map[string]bool{
+		"get": false, "set": false, "list": false, "delete": false, "rotate": false,
+	}
 	for _, c := range cmd.Commands() {
 		if _, ok := want[c.Name()]; ok {
 			want[c.Name()] = true
@@ -37,12 +39,24 @@ func TestNewSecretCmd_HasSubcommands(t *testing.T) {
 func TestSecretGetCmd_MaskedByDefault(t *testing.T) {
 	t.Parallel()
 
+	// The fingerprint is now computed unconditionally (independent of
+	// --reveal), so 'get' always decrypts internally — the fixture needs a
+	// real ciphertext, not an opaque placeholder string.
+	enc, err := crypto.NewAESGCMEncryptor(secretWiringKey, "platform", "dev", "api_key")
+	if err != nil {
+		t.Fatalf("NewAESGCMEncryptor: %v", err)
+	}
+	ciphertext, keyID, err := enc.Encrypt([]byte("sk_live_abc"))
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
 	d := &deps{
 		cfg: &appconfig.Config{SecretKey: secretWiringKey},
 		log: noopLogger{},
 		store: fakeStore{
 			getFn: func(context.Context, string, string, store.ItemType, string) (*store.Item, error) {
-				return &store.Item{Key: "api_key", Value: "ciphertext", KeyID: "kid", Version: 1}, nil
+				return &store.Item{Key: "api_key", Value: string(ciphertext), KeyID: keyID, Version: 1}, nil
 			},
 		},
 	}
@@ -58,8 +72,15 @@ func TestSecretGetCmd_MaskedByDefault(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !bytes.Contains(out.Bytes(), []byte("value:      ***")) {
+	if !bytes.Contains(out.Bytes(), []byte("value:       ***")) {
 		t.Fatalf("output should mask value, got: %s", out.String())
+	}
+	if bytes.Contains(out.Bytes(), []byte("sk_live_abc")) {
+		t.Fatalf("plaintext must never appear in metadata-only output, got: %s", out.String())
+	}
+	wantFingerprint := secretFingerprint([]byte("sk_live_abc"))
+	if !bytes.Contains(out.Bytes(), []byte("fingerprint: "+wantFingerprint)) {
+		t.Fatalf("output missing expected fingerprint %q, got: %s", wantFingerprint, out.String())
 	}
 }
 
@@ -103,6 +124,9 @@ func TestSecretGetCmd_RevealDecrypts(t *testing.T) {
 	}
 	if got["value"] != "sk_live_abc" {
 		t.Fatalf("value = %v, want sk_live_abc", got["value"])
+	}
+	if got["fingerprint"] != secretFingerprint([]byte("sk_live_abc")) {
+		t.Fatalf("fingerprint = %v, want %v", got["fingerprint"], secretFingerprint([]byte("sk_live_abc")))
 	}
 }
 

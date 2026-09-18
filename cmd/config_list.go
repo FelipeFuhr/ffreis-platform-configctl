@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ffreis/platform-configctl/internal/store"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
 
 func newConfigListCmd(d *deps, gf *globalFlags) *cobra.Command {
@@ -60,6 +60,6 @@ func newConfigListCmd(d *deps, gf *globalFlags) *cobra.Command {
 		},
 	}
 
-	addProjectEnvFlags(cmd, &project, &env)
+	addProjectEnvFlags(cmd, d, &project, &env)
 	return cmd
 }

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/backup"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/backup"
 )
 
 const (

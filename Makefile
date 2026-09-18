@@ -1,5 +1,5 @@
 BINARY           := platform-configctl
-MODULE           := github.com/ffreis/platform-configctl
+MODULE           := github.com/FelipeFuhr/ffreis-platform-configctl
 BUILD_DIR        := bin
 CMD_PKG          := ./cmd/$(BINARY)
 GOFLAGS          := -trimpath
@@ -13,13 +13,15 @@ IMAGE_TAG        ?= dev
 GITLEAKS         ?= gitleaks
 LEFTHOOK_VERSION ?= 1.7.10
 
-MUTATION_PACKAGES ?= ./internal/crypto/... ./internal/diff/... ./internal/validate/...
+MUTATION_PACKAGES ?= ./pkg/crypto/... ./internal/diff/... ./internal/validate/... \
+	./pkg/guard/... ./pkg/profile/...
 MUTATION_THRESHOLD ?= 60
 COVERAGE_MIN     ?= 75
 LEFTHOOK_DIR     ?= $(CURDIR)/.bin
 LEFTHOOK_BIN     ?= $(LEFTHOOK_DIR)/lefthook
 
-.PHONY: all build build-all install test test-short test-integration ddb-local-up ddb-local-down \
+.PHONY: all build build-all install test test-short \
+        test-integration ddb-local-up ddb-local-down \
         vet lint tidy clean check fmt fmt-check sec ci \
         validate plan mutation fuzz fuzz-extended help \
         coverage-gate integration-coverage-gate quality-gates \
@@ -35,7 +37,11 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) $(CMD_PKG)
 
-build-all: build ## Alias required by the lefthook release tier
+# build-all: alias required by the lefthook release tier. vaultctl moved to
+# its own repo (ffreis-platform-vaultctl) — this repo now ships one binary,
+# so build-all is just build, kept so the shared lefthook release tier's
+# `make build-all` contract still resolves.
+build-all: build
 
 ## install: install the binary to GOPATH/bin
 install:
@@ -243,12 +249,26 @@ container-shell:
 	  --entrypoint /bin/sh \
 	  $(IMAGE_NAME):test
 
-## mutation: run mutation testing with gremlins (slow — intended for CI/weekly)
-mutation: ## Run mutation testing with gremlins (slow — CI only)
+## mutation: run mutation testing with gremlins, one package at a time (slow — CI only)
+#
+# gremlins' `unleash [path]` takes exactly ONE plain directory path (not a
+# go-list `...` pattern, and not space-separated like `go test`'s package
+# args) — passing MUTATION_PACKAGES straight through as positional args used
+# to fail with "accepts at most 1 arg(s)" the moment a second package was
+# added to the (originally single-package) default. Loop over each entry
+# instead, stripping the trailing "/..." each one carries for `go test`
+# compatibility, and propagate the worst exit code across the run.
+mutation:
 	@which gremlins >/dev/null 2>&1 || go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
-	gremlins unleash --threshold-efficacy $(MUTATION_THRESHOLD) $(MUTATION_PACKAGES)
+	@status=0; \
+	for pkg in $(MUTATION_PACKAGES); do \
+		path=$${pkg%/...}; \
+		echo "==> gremlins unleash $$path"; \
+		gremlins unleash --threshold-efficacy $(MUTATION_THRESHOLD) "$$path" || status=1; \
+	done; \
+	exit $$status
 
-FUZZ_PACKAGES  ?= ./internal/crypto/... ./internal/validate/...
+FUZZ_PACKAGES  ?= ./pkg/crypto/... ./internal/validate/...
 FUZZ_TIME      ?= 30s
 FUZZ_TIME_EXT  ?= 10m
 

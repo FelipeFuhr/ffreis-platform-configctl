@@ -26,7 +26,7 @@ and secrets backed by DynamoDB. Secrets are encrypted with AES-256-GCM.
 ```bash
 make install
 # or
-go install github.com/ffreis/platform-configctl@latest
+go install github.com/FelipeFuhr/ffreis-platform-configctl@latest
 ```
 
 ---
@@ -39,6 +39,7 @@ go install github.com/ffreis/platform-configctl@latest
 | `CONFIGCTL_SECRET_KEY` | For secrets | Passphrase for AES-256-GCM key derivation |
 | `CONFIGCTL_OLD_SECRET_KEY` | Rotation only | Previous passphrase during key rotation |
 | `CONFIGCTL_LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
+| `CONFIGCTL_NO_REVEAL` | No | Truthy (`1`/`true`/`yes`/`on`) refuses `secret get --reveal` outright — see [Security Notes](#security-notes) |
 | `AWS_DEFAULT_REGION` | Recommended | AWS region |
 | `AWS_PROFILE` / standard chain | No | Any AWS credential mechanism works |
 
@@ -100,11 +101,39 @@ platform-configctl secret get stripe_key --project payments --env prod
 # Reveal the decrypted value
 platform-configctl secret get stripe_key --project payments --env prod --reveal
 
+# 'secret get' always includes a one-way fingerprint (sha256(plaintext)[0:8],
+# hex) so you can confirm "is this the secret I think it is" without ever
+# decrypting for display — safe to paste into a ticket or compare across envs
+platform-configctl secret get stripe_key --project payments --env prod
+
 # List secrets (keys only, values always ***)
 platform-configctl secret list --project payments --env prod
 
 # Delete a secret
 platform-configctl secret delete stripe_key --project payments --env prod
+```
+
+Need to inject a decrypted value into a child process's environment, or write
+it to a file without ever printing it? That's `vaultctl exec`/`vaultctl
+export-env`, in the fleet's separate credential-vault CLI (its own repo,
+`ffreis-platform-vaultctl`, which imports this module's `pkg/crypto`,
+`pkg/store`, `pkg/guard`, `pkg/profile` and `pkg/backup` packages directly).
+Those are vault-specific leak-control primitives, not this binary's job.
+
+#### `CONFIGCTL_NO_REVEAL` kill switch
+
+Set `CONFIGCTL_NO_REVEAL=1` (or `true`/`yes`/`on`) to make `secret get --reveal`
+refuse to decrypt/print the plaintext, regardless of the flag — a fleet-wide
+switch for environments where stdout is not a safe place for a secret to
+land, such as an AI agent session whose transcript is persisted. It only
+gates `--reveal`'s print path: plain `secret get` (fingerprint + metadata) is
+unaffected, since it never writes the plaintext to a stream configctl
+controls.
+
+```bash
+export CONFIGCTL_NO_REVEAL=1
+platform-configctl secret get stripe_key --project payments --env prod --reveal
+# error: --reveal refused: CONFIGCTL_NO_REVEAL is set — ...
 ```
 
 ### Backup / Export / Import
@@ -169,13 +198,48 @@ platform-configctl whoami
 ## Global Flags
 
 ```
---project    string   Project name (required per command)
---env        string   Environment: dev, staging, prod (required per command)
---region     string   AWS region (overrides AWS_DEFAULT_REGION)
---table      string   DynamoDB table name (overrides CONFIGCTL_TABLE)
+--project    string   Project name (required per command, unless supplied by --profile)
+--env        string   Environment: dev, staging, prod (required per command, unless supplied by --profile)
+--region     string   AWS region (overrides AWS_DEFAULT_REGION, and --profile's region)
+--table      string   DynamoDB table name (overrides CONFIGCTL_TABLE, and --profile's table)
 --log-level  string   debug|info|warn|error
 --output     string   text|json|table (default: text)
+--profile    string   Named profile from ~/.config/configctl/profiles.yaml (see Profiles below)
 ```
+
+---
+
+## Profiles
+
+`--profile <name>` resolves default `table`/`project`/`env`/`region` values
+from `~/.config/configctl/profiles.yaml`, so a repeated invocation against
+the same project+env does not need all four flags every time. Any
+explicitly-passed `--table`/`--project`/`--env`/`--region` flag always wins
+over the profile, and the profile only fills in a value the environment
+(e.g. `CONFIGCTL_TABLE`) left empty.
+
+```yaml
+# ~/.config/configctl/profiles.yaml
+payments-prod:
+  table: platform-config
+  project: payments
+  env: prod
+  region: us-east-1
+payments-dev:
+  table: platform-config
+  project: payments
+  env: dev
+```
+
+```bash
+platform-configctl secret get stripe_key --profile payments-prod
+# equivalent to:
+platform-configctl secret get stripe_key \
+  --table platform-config --project payments --env prod --region us-east-1
+```
+
+A missing profiles file, or a `--profile` name not defined in it, is a clear
+error — never a silent no-op.
 
 ---
 
@@ -189,6 +253,27 @@ platform-configctl whoami
   `project+env` location, preventing ciphertext transplant attacks.
 - **Least privilege**: grant read-only DynamoDB permissions for CI. Write
   permissions are only needed for `set`, `delete`, and `import`.
+- **A secret value must never land in a stream that could be captured into an
+  AI agent's session transcript.** `secret get` shows a one-way fingerprint
+  (`sha256(plaintext)[0:8]`, hex) by default and only prints plaintext with
+  `--reveal`. Set `CONFIGCTL_NO_REVEAL=1` to disable `--reveal` entirely in an
+  environment where that risk is unacceptable (see [Environment
+  Variables](#environment-variables)). Need a value to reach a child process
+  or a file without ever printing it? See `vaultctl exec`/`vaultctl
+  export-env` in the fleet's separate credential-vault CLI, below.
+
+---
+
+## vaultctl
+
+`vaultctl` is the fleet's credential-vault CLI — a separate tool in its own
+repo (`ffreis-platform-vaultctl`), not built from this repo. It imports this
+module's `pkg/crypto`, `pkg/store`, `pkg/guard`, `pkg/profile`, `pkg/backup`,
+and `pkg/logger` packages directly (as a real Go module dependency) rather
+than duplicating them, but is a separate binary on purpose: vault-specific
+leak-control primitives don't belong bolted onto a CLI literally named
+"config". See that repo for `vaultctl`'s own usage, environment variables,
+and command surface.
 
 ---
 
@@ -200,17 +285,20 @@ platform-configctl whoami
 | `1` | Error (I/O, AWS, validation, etc.) |
 | `2` | Key not found (get on absent key) |
 
+`vaultctl`, in its own repo, shares this same exit-code contract.
+
 ---
 
 ## Development
 
 ```bash
-make tidy          # go mod tidy + verify
-make build         # compile binary to bin/
-make test          # run all tests
-make test-short    # unit tests only (no AWS)
-make lint          # golangci-lint
-make check         # tidy + vet + test-short
+make tidy             # go mod tidy + verify
+make build            # compile platform-configctl to bin/
+make test             # run all tests
+make test-short       # unit tests only (no AWS)
+make test-integration # command layer against DynamoDB Local
+make lint             # golangci-lint
+make check            # tidy + vet + test-short
 ```
 
 ---
@@ -221,12 +309,16 @@ make check         # tidy + vet + test-short
 cmd/
   platform-configctl/main.go  Thin entry point
   ...                         Cobra CLI boundary — no business logic
-internal/
-  appconfig/         Config resolution from env + flags
+pkg/                  ← promoted for external import (e.g. by vaultctl's own repo)
   store/             DynamoDB storage abstraction (Store interface)
   crypto/            AES-256-GCM encryption (Encryptor interface)
   backup/            Export/import format and checksum verification
+  logger/            Structured zap logging with secret masking
+  profile/           Named --profile default resolution, per-app path (shared)
+  guard/             Leak-control primitives shared with vaultctl: fingerprint,
+                      env-truthy kill-switch parsing, empty/"-" value guard
+internal/
+  appconfig/         Config resolution from env + flags
   diff/              State comparison (live vs snapshot)
   validate/          Rule-based validation engine
-  logger/            Structured zap logging with secret masking
 ```

@@ -11,8 +11,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
-	"github.com/ffreis/platform-configctl/internal/backup"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/backup"
 )
 
 func newBackupExportCmd(d *deps, gf *globalFlags) *cobra.Command {
@@ -35,7 +35,7 @@ func newBackupExportCmd(d *deps, gf *globalFlags) *cobra.Command {
 		},
 	}
 
-	addProjectEnvFlags(cmd, &project, &env)
+	addProjectEnvFlags(cmd, d, &project, &env)
 	cmd.Flags().StringVar(&output, "output", "-", "Output file path; use '-' for stdout")
 	cmd.Flags().BoolVar(&includeSecrets, "include-secrets", false, "Include secrets as ciphertext in the backup")
 	_ = gf

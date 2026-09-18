@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/crypto"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/crypto"
 )
 
 const (

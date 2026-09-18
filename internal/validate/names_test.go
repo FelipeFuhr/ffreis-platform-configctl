@@ -3,7 +3,7 @@ package validate_test
 import (
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/validate"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/validate"
 )
 
 func TestValidationError_Error(t *testing.T) {

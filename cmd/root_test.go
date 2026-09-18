@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/ffreis/platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/internal/appconfig"
+	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/profile"
 )
 
 func TestBuildRoot_HasSubcommandsAndFlags(t *testing.T) {
@@ -32,7 +35,7 @@ func TestBuildRoot_HasSubcommandsAndFlags(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"region", "table", "log-level", "output", "ui"} {
+	for _, name := range []string{"region", "table", "log-level", "output", "ui", "profile"} {
 		if root.PersistentFlags().Lookup(name) == nil {
 			t.Errorf("persistent flag --%s is not registered", name)
 		}
@@ -183,6 +186,104 @@ func TestInitDeps_SucceedsWithFlagOverrides(t *testing.T) {
 	}
 	if d.ui == nil {
 		t.Fatal("d.ui is nil")
+	}
+}
+
+// writeProfilesFile writes a profiles.yaml under a fresh $HOME (set via
+// t.Setenv) so profile.DefaultPath() resolves to it deterministically.
+func writeProfilesFile(t *testing.T, contents string) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "configctl")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir profiles dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "profiles.yaml"), []byte(contents), 0o600); err != nil {
+		t.Fatalf("write profiles.yaml: %v", err)
+	}
+}
+
+func TestInitDeps_ProfileSuppliesTableRegionProjectEnv(t *testing.T) {
+	t.Setenv("CONFIGCTL_TABLE", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+	t.Setenv("AWS_REGION", "")
+	writeProfilesFile(t, "payments-prod:\n  table: platform-config\n  project: payments\n  env: prod\n  region: us-east-1\n")
+
+	gf := &globalFlags{profile: "payments-prod", ui: "plain"}
+	d := &deps{}
+	if err := initDeps(context.Background(), gf, d); err != nil {
+		t.Fatalf("initDeps() error = %v, want nil", err)
+	}
+	if d.cfg.TableName != "platform-config" {
+		t.Fatalf("cfg.TableName = %q, want platform-config", d.cfg.TableName)
+	}
+	if d.cfg.AWSRegion != "us-east-1" {
+		t.Fatalf("cfg.AWSRegion = %q, want us-east-1", d.cfg.AWSRegion)
+	}
+	if d.profile == nil || d.profile.Project != "payments" || d.profile.Env != "prod" {
+		t.Fatalf("d.profile = %#v, want Project=payments Env=prod", d.profile)
+	}
+}
+
+func TestInitDeps_ExplicitFlagsOverrideProfile(t *testing.T) {
+	t.Setenv("CONFIGCTL_TABLE", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+	t.Setenv("AWS_REGION", "")
+	writeProfilesFile(t, "payments-prod:\n  table: platform-config\n  region: us-east-1\n")
+
+	gf := &globalFlags{profile: "payments-prod", table: "override-table", region: "eu-west-1", ui: "plain"}
+	d := &deps{}
+	if err := initDeps(context.Background(), gf, d); err != nil {
+		t.Fatalf("initDeps() error = %v, want nil", err)
+	}
+	if d.cfg.TableName != "override-table" {
+		t.Fatalf("cfg.TableName = %q, want override-table (explicit flag must win)", d.cfg.TableName)
+	}
+	if d.cfg.AWSRegion != "eu-west-1" {
+		t.Fatalf("cfg.AWSRegion = %q, want eu-west-1 (explicit flag must win)", d.cfg.AWSRegion)
+	}
+}
+
+func TestInitDeps_ProfileMissingFileIsClearError(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // no ~/.config/configctl/profiles.yaml written
+	gf := &globalFlags{profile: "anything"}
+	d := &deps{}
+	if err := initDeps(context.Background(), gf, d); err == nil {
+		t.Fatal("initDeps() error = nil, want error for missing profiles file")
+	}
+}
+
+func TestInitDeps_ProfileNameNotFoundIsClearError(t *testing.T) {
+	writeProfilesFile(t, "payments-prod:\n  table: platform-config\n")
+	gf := &globalFlags{profile: "does-not-exist"}
+	d := &deps{}
+	if err := initDeps(context.Background(), gf, d); err == nil {
+		t.Fatal("initDeps() error = nil, want error for undefined profile name")
+	}
+}
+
+func TestApplyProfileProjectEnv_ExplicitFlagWinsOverProfile(t *testing.T) {
+	t.Parallel()
+
+	d := &deps{profile: &profile.Profile{Project: "from-profile", Env: "from-profile-env"}}
+	project, env := "explicit-project", ""
+	applyProfileProjectEnv(d, &project, &env)
+	if project != "explicit-project" {
+		t.Fatalf("project = %q, want explicit-project unchanged", project)
+	}
+	if env != "from-profile-env" {
+		t.Fatalf("env = %q, want from-profile-env (filled from profile)", env)
+	}
+}
+
+func TestApplyProfileProjectEnv_NilProfileIsNoop(t *testing.T) {
+	t.Parallel()
+
+	project, env := "", ""
+	applyProfileProjectEnv(&deps{}, &project, &env)
+	if project != "" || env != "" {
+		t.Fatalf("project/env = %q/%q, want unchanged when no profile is active", project, env)
 	}
 }
 
