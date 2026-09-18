@@ -105,7 +105,7 @@ jobs:
     # FelipeFuhr/ffreis-workflows-go#109. Needs Docker, hence the runner
     # override (the self-hosted "local" default has no container runtime
     # provisioned yet).
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-integration-coverage.yml@b11a79c4ddb22bf7acc90bee0021c1ee42f9ee55 # pre-release: ffreis-workflows-go#109 — re-pin to a tag once that PR merges & releases
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-integration-coverage.yml@b93b0137b4b0ba68d6b1086d1792ee8dafbb1fbd # v1.5.0
     with:
       runner: '["ubuntu-latest"]'
       go-version: "1.25"
