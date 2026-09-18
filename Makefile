@@ -13,8 +13,17 @@ IMAGE_TAG        ?= dev
 GITLEAKS         ?= gitleaks
 LEFTHOOK_VERSION ?= 1.7.10
 
+# Every pkg/ and internal/ package with meaningful business logic, plus the
+# cmd/ CLI layer itself. Previously scoped to crypto/diff/validate/guard/
+# profile only — store, backup, appconfig and cmd were left out of an
+# earlier pass despite having their own non-trivial branching (DynamoDB
+# conditional-write semantics, export/import/checksum logic, exit-code
+# selection). cmd/'s run is the slowest of the set (recompiles+retests the
+# whole CLI surface per mutant); if that becomes a CI time problem, split
+# it into its own `make mutation-cmd` target rather than dropping it here.
 MUTATION_PACKAGES ?= ./pkg/crypto/... ./internal/diff/... ./internal/validate/... \
-	./pkg/guard/... ./pkg/profile/...
+	./pkg/guard/... ./pkg/profile/... ./pkg/store/... ./pkg/backup/... \
+	./internal/appconfig/... ./cmd/...
 MUTATION_THRESHOLD ?= 60
 COVERAGE_MIN     ?= 75
 LEFTHOOK_DIR     ?= $(CURDIR)/.bin
